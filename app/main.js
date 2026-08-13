@@ -132,6 +132,12 @@ function serializeInteger(value) {
   return `:${Number(value)}\r\n`;
 }
 
+function serializeArray(items) {
+  const values = Array.isArray(items) ? items : [];
+  const payload = values.map((item) => serializeBulkString(item)).join("");
+  return `*${values.length}\r\n${payload}`;
+}
+
 function pruneExpiredKeys() {
   const now = Date.now();
   for (const [key, entry] of store.entries()) {
@@ -236,6 +242,29 @@ function handleCommand(commandArray) {
 
     store.set(listKey, { value: list, expiresAt: existing?.expiresAt ?? null });
     return serializeInteger(list.length);
+  }
+
+  if (commandName === "LRANGE") {
+    const key = commandArray[1];
+    const start = Number(commandArray[2]);
+    const stop = Number(commandArray[3]);
+
+    if (key === undefined || Number.isNaN(start) || Number.isNaN(stop)) {
+      return serializeArray([]);
+    }
+
+    const item = getStoredValue(String(key));
+    if (!item || !Array.isArray(item)) {
+      return serializeArray([]);
+    }
+
+    if (start >= item.length || start > stop) {
+      return serializeArray([]);
+    }
+
+    const normalizedStop = Math.min(stop, item.length - 1);
+    const result = item.slice(start, normalizedStop + 1);
+    return serializeArray(result);
   }
 
   return null;
