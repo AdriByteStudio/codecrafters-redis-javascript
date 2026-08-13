@@ -246,16 +246,27 @@ function handleCommand(commandArray) {
 
   if (commandName === "LRANGE") {
     const key = commandArray[1];
-    const start = Number(commandArray[2]);
-    const stop = Number(commandArray[3]);
+    const startRaw = Number(commandArray[2]);
+    const stopRaw = Number(commandArray[3]);
 
-    if (key === undefined || Number.isNaN(start) || Number.isNaN(stop)) {
+    if (key === undefined || Number.isNaN(startRaw) || Number.isNaN(stopRaw)) {
       return serializeArray([]);
     }
 
     const item = getStoredValue(String(key));
     if (!item || !Array.isArray(item)) {
       return serializeArray([]);
+    }
+
+    let start = startRaw;
+    let stop = stopRaw;
+
+    if (start < 0) {
+      start = Math.max(0, item.length + start);
+    }
+
+    if (stop < 0) {
+      stop = Math.max(-1, item.length + stop);
     }
 
     if (start >= item.length || start > stop) {
