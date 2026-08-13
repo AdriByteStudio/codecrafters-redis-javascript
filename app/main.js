@@ -1080,7 +1080,13 @@ server.listen(port, "127.0.0.1", () => {
 
       masterResponse = masterResponse.slice(parsed.nextOffset);
       if (handshakeStep === 5) {
-        handleCommand.call(masterConnection, parsed.value, replicaTransactionState, masterConnection);
+        const propagatedCommand = String(parsed.value[0] ?? "").toUpperCase();
+        const propagatedOption = String(parsed.value[1] ?? "").toUpperCase();
+        if (propagatedCommand === "REPLCONF" && propagatedOption === "GETACK") {
+          masterConnection.write(serializeRESPValue(["REPLCONF", "ACK", "0"]));
+        } else {
+          handleCommand.call(masterConnection, parsed.value, replicaTransactionState, masterConnection);
+        }
       } else if (handshakeStep === 0 && parsed.value === "PONG") {
         masterConnection.write(serializeRESPValue(["REPLCONF", "listening-port", String(port)]));
         handshakeStep = 1;
