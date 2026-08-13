@@ -19,9 +19,17 @@ const replicaOfIndex = process.argv.indexOf("--replicaof");
 const replicaOf = replicaOfIndex === -1 ? "" : String(process.argv[replicaOfIndex + 1] ?? "");
 const [masterHost, masterPort] = replicaOf.trim().split(/\s+/);
 const dirIndex = process.argv.indexOf("--dir");
-const rdbDirectory = dirIndex === -1 ? "" : String(process.argv[dirIndex + 1] ?? "");
+const rdbDirectory = dirIndex === -1 ? process.cwd() : String(process.argv[dirIndex + 1] ?? "");
 const dbFilenameIndex = process.argv.indexOf("--dbfilename");
 const rdbFilename = dbFilenameIndex === -1 ? "" : String(process.argv[dbFilenameIndex + 1] ?? "");
+const configuration = {
+  dir: rdbDirectory,
+  dbfilename: rdbFilename,
+  appendonly: "no",
+  appenddirname: "appendonlydir",
+  appendfilename: "appendonly.aof",
+  appendfsync: "everysec",
+};
 
 function markKeyModified(key) {
   const version = keyVersions.get(key) ?? 0;
@@ -587,12 +595,8 @@ function handleCommand(commandArray, transactionState, connection) {
 
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
-    if (parameter === "dir") {
-      return serializeRESPValue(["dir", rdbDirectory]);
-    }
-
-    if (parameter === "dbfilename") {
-      return serializeRESPValue(["dbfilename", rdbFilename]);
+    if (Object.hasOwn(configuration, parameter)) {
+      return serializeRESPValue([parameter, configuration[parameter]]);
     }
 
     return serializeRESPValue([]);
