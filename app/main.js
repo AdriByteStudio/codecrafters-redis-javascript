@@ -167,6 +167,22 @@ function resolveAcknowledgedWaits() {
   }
 }
 
+function getActiveAofPath() {
+  const appendOnlyDirectory = path.join(configuration.dir, configuration.appenddirname);
+  const manifestPath = path.join(appendOnlyDirectory, `${configuration.appendfilename}.manifest`);
+  const manifest = fs.readFileSync(manifestPath, "utf8");
+  const entry = manifest.match(/^file\s+(\S+)\s+seq\s+\d+\s+type\s+i$/m);
+  return path.join(appendOnlyDirectory, entry ? entry[1] : `${configuration.appendfilename}.1.incr.aof`);
+}
+
+function appendAofCommand(command) {
+  if (configuration.appendonly !== "yes") {
+    return;
+  }
+
+  fs.appendFileSync(getActiveAofPath(), command);
+}
+
 function scheduleBLPOPTimeout(connection, listKey, timeoutSeconds) {
   if (timeoutSeconds <= 0) {
     return null;
@@ -743,6 +759,7 @@ function handleCommand(commandArray, transactionState, connection) {
     store.set(storeKey, { value, expiresAt });
     markKeyModified(storeKey);
     const command = serializeRESPValue(commandArray);
+    appendAofCommand(command);
     masterReplicationOffset += Buffer.byteLength(command);
     for (const replicaConnection of replicaConnections) {
       replicaConnection.write(command);
