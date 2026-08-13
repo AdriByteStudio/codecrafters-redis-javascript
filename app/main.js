@@ -7,6 +7,10 @@ const keyVersions = new Map();
 const serverRole = process.argv.includes("--replicaof") ? "slave" : "master";
 const masterReplicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
 const masterReplicationOffset = 0;
+const emptyRdbFile = Buffer.from(
+  "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==",
+  "base64",
+);
 const replicaOfIndex = process.argv.indexOf("--replicaof");
 const replicaOf = replicaOfIndex === -1 ? "" : String(process.argv[replicaOfIndex + 1] ?? "");
 const [masterHost, masterPort] = replicaOf.trim().split(/\s+/);
@@ -452,7 +456,9 @@ function handleCommand(commandArray, transactionState) {
   }
 
   if (commandName === "PSYNC") {
-    return `+FULLRESYNC ${masterReplicationId} ${masterReplicationOffset}\r\n`;
+    const fullResync = Buffer.from(`+FULLRESYNC ${masterReplicationId} ${masterReplicationOffset}\r\n`);
+    const rdbHeader = Buffer.from(`$${emptyRdbFile.length}\r\n`);
+    return Buffer.concat([fullResync, rdbHeader, emptyRdbFile]);
   }
 
   if (commandName === "INFO") {
