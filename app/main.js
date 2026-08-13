@@ -426,9 +426,15 @@ function handleCommand(commandArray, transactionState) {
 
   if (commandName === "EXEC") {
     if (transactionState.active) {
+      const queuedCommands = transactionState.commands;
       transactionState.active = false;
       transactionState.commands = [];
-      return serializeRESPValue([]);
+
+      const responses = queuedCommands.map((queuedCommand) => (
+        handleCommand.call(this, queuedCommand, transactionState)
+      ));
+
+      return `*${responses.length}\r\n${responses.join("")}`;
     }
 
     return serializeError("EXEC without MULTI");
