@@ -168,6 +168,19 @@ function serializeArray(items) {
   return `*${values.length}\r\n${payload}`;
 }
 
+function serializeRESPValue(value) {
+  if (Array.isArray(value)) {
+    const payload = value.map((item) => serializeRESPValue(item)).join("");
+    return `*${value.length}\r\n${payload}`;
+  }
+
+  if (value === null) {
+    return "$-1\r\n";
+  }
+
+  return serializeBulkString(value);
+}
+
 function serializeNullArray() {
   return "*-1\r\n";
 }
@@ -220,6 +233,53 @@ function isValidStreamEntryId(candidateId, lastEntryId) {
   }
 
   return true;
+}
+
+function compareStreamEntryIds(leftId, rightId) {
+  const left = parseStreamEntryId(leftId);
+  const right = parseStreamEntryId(rightId);
+
+  if (!left || !right) {
+    return 0;
+  }
+
+  if (left.milliseconds < right.milliseconds) {
+    return -1;
+  }
+
+  if (left.milliseconds > right.milliseconds) {
+    return 1;
+  }
+
+  if (left.sequence < right.sequence) {
+    return -1;
+  }
+
+  if (left.sequence > right.sequence) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function normalizeStreamRangeId(rawId, isEnd) {
+  if (typeof rawId !== "string") {
+    return null;
+  }
+
+  if (rawId.includes("-")) {
+    return parseStreamEntryId(rawId);
+  }
+
+  const milliseconds = Number(rawId);
+  if (Number.isNaN(milliseconds)) {
+    return null;
+  }
+
+  return {
+    milliseconds,
+    sequence: isEnd ? Number.MAX_SAFE_INTEGER : 0,
+  };
 }
 
 function pruneExpiredKeys() {
@@ -400,6 +460,50 @@ function handleCommand(commandArray) {
     stream.entries.push({ id: resolvedEntryId, fields });
     store.set(streamKey, { type: "stream", entries: stream.entries, expiresAt: null });
     return serializeBulkString(resolvedEntryId);
+  }
+
+  if (commandName === "XRANGE") {
+    const key = commandArray[1];
+    const startRaw = commandArray[2];
+    const endRaw = commandArray[3];
+
+    if (key === undefined || startRaw === undefined || endRaw === undefined) {
+      return serializeRESPValue([]);
+    }
+
+    const streamEntry = store.get(String(key));
+    if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
+      return serializeRESPValue([]);
+    }
+
+    const start = normalizeStreamRangeId(String(startRaw), false);
+    const end = normalizeStreamRangeId(String(endRaw), true);
+
+    if (!start || !end) {
+      return serializeRESPValue([]);
+    }
+
+    const matches = streamEntry.entries.filter((entry) => {
+      const entryId = parseStreamEntryId(entry.id);
+      if (!entryId) {
+        return false;
+      }
+
+      const startComparison = compareStreamEntryIds(entry.id, `${start.milliseconds}-${start.sequence}`);
+      const endComparison = compareStreamEntryIds(entry.id, `${end.milliseconds}-${end.sequence}`);
+
+      return startComparison >= 0 && endComparison <= 0;
+    });
+
+    const response = matches.map((entry) => {
+      const pairValues = [];
+      for (const [field, value] of Object.entries(entry.fields)) {
+        pairValues.push(field, value);
+      }
+      return [entry.id, pairValues];
+    });
+
+    return serializeRESPValue(response);
   }
 
   if (commandName === "RPUSH") {
