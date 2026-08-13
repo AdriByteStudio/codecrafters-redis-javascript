@@ -1233,6 +1233,10 @@ const portIndex = process.argv.indexOf("--port");
 const configuredPort = portIndex === -1 ? NaN : Number(process.argv[portIndex + 1]);
 const port = Number.isInteger(configuredPort) ? configuredPort : 6379;
 
+if (configuration.appendonly === "yes") {
+  fs.mkdirSync(path.join(configuration.dir, configuration.appenddirname), { recursive: true });
+}
+
 loadRdbFile();
 
 server.listen(port, "127.0.0.1", () => {
