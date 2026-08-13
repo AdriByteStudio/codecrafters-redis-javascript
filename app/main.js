@@ -172,6 +172,56 @@ function serializeNullArray() {
   return "*-1\r\n";
 }
 
+function serializeError(message) {
+  return `-ERR ${message}\r\n`;
+}
+
+function parseStreamEntryId(entryId) {
+  if (typeof entryId !== "string") {
+    return null;
+  }
+
+  const match = entryId.match(/^(\d+)-(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    milliseconds: Number(match[1]),
+    sequence: Number(match[2]),
+  };
+}
+
+function isValidStreamEntryId(candidateId, lastEntryId) {
+  const candidate = parseStreamEntryId(candidateId);
+  if (!candidate) {
+    return false;
+  }
+
+  if (candidate.milliseconds === 0 && candidate.sequence === 0) {
+    return false;
+  }
+
+  if (!lastEntryId) {
+    return candidate.milliseconds > 0 || candidate.sequence > 0;
+  }
+
+  const last = parseStreamEntryId(lastEntryId);
+  if (!last) {
+    return false;
+  }
+
+  if (candidate.milliseconds < last.milliseconds) {
+    return false;
+  }
+
+  if (candidate.milliseconds === last.milliseconds) {
+    return candidate.sequence > last.sequence;
+  }
+
+  return true;
+}
+
 function pruneExpiredKeys() {
   const now = Date.now();
   for (const [key, entry] of store.entries()) {
@@ -302,6 +352,15 @@ function handleCommand(commandArray) {
     const streamKey = String(key);
     const existing = store.get(streamKey);
     const stream = existing && existing.type === "stream" ? existing : { type: "stream", entries: [] };
+    const lastEntry = stream.entries.length > 0 ? stream.entries[stream.entries.length - 1] : null;
+
+    if (String(entryId) === "0-0") {
+      return serializeError("The ID specified in XADD must be greater than 0-0");
+    }
+
+    if (!isValidStreamEntryId(String(entryId), lastEntry ? lastEntry.id : null)) {
+      return serializeError("The ID specified in XADD is equal or smaller than the target stream top item");
+    }
 
     const fields = {};
     for (let i = 0; i < args.length; i += 2) {
