@@ -476,6 +476,51 @@ function handleCommand(commandArray) {
     return serializeBulkString(resolvedEntryId);
   }
 
+  if (commandName === "XREAD") {
+    const streamsIndex = commandArray.indexOf("STREAMS");
+    if (streamsIndex === -1) {
+      return serializeNullArray();
+    }
+
+    const streamArgs = commandArray.slice(streamsIndex + 1);
+    if (streamArgs.length === 0 || streamArgs.length % 2 !== 0) {
+      return serializeNullArray();
+    }
+
+    const result = [];
+
+    for (let i = 0; i < streamArgs.length; i += 2) {
+      const streamKey = String(streamArgs[i]);
+      const startId = String(streamArgs[i + 1]);
+      const streamEntry = store.get(streamKey);
+
+      if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
+        continue;
+      }
+
+      const matches = streamEntry.entries.filter((entry) => compareStreamEntryIds(entry.id, startId) > 0);
+      if (matches.length === 0) {
+        continue;
+      }
+
+      const entryPayload = matches.map((entry) => {
+        const pairValues = [];
+        for (const [field, value] of Object.entries(entry.fields)) {
+          pairValues.push(field, value);
+        }
+        return [entry.id, pairValues];
+      });
+
+      result.push([streamKey, entryPayload]);
+    }
+
+    if (result.length === 0) {
+      return serializeNullArray();
+    }
+
+    return serializeRESPValue(result);
+  }
+
   if (commandName === "XRANGE") {
     const key = commandArray[1];
     const startRaw = commandArray[2];
