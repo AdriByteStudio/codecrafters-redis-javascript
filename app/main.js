@@ -464,7 +464,7 @@ function handleCommand(commandArray, transactionState, connection) {
   }
 
   if (commandName === "WAIT") {
-    return serializeInteger(0);
+    return serializeInteger(replicaConnections.size);
   }
 
   if (commandName === "INFO") {
