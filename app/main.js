@@ -291,10 +291,21 @@ function handleCommand(commandArray) {
       return serializeNullBulkString();
     }
 
-    const [removed] = item;
-    const remaining = item.slice(1);
+    const count = commandArray[2] === undefined ? 1 : Number(commandArray[2]);
+    if (Number.isNaN(count) || count <= 0) {
+      return serializeNullBulkString();
+    }
+
+    const removedCount = Math.min(count, item.length);
+    const removed = item.slice(0, removedCount);
+    const remaining = item.slice(removedCount);
     store.set(listKey, { value: remaining, expiresAt: null });
-    return serializeBulkString(removed);
+
+    if (removedCount === 1) {
+      return serializeBulkString(removed[0]);
+    }
+
+    return serializeArray(removed);
   }
 
   if (commandName === "LRANGE") {
