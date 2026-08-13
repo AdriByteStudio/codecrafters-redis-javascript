@@ -594,56 +594,25 @@ function handleCommand(commandArray) {
       return serializeRESPValue(result);
     }
 
-    if (timeoutMs <= 0) {
-      return serializeNullArray();
-    }
+    if (timeoutMs === 0) {
+      const waiting = {
+        connection: this,
+        streamKeys: [],
+        ids: [],
+        timeoutMs: 0,
+        timeoutId: null,
+      };
 
-    const waiting = {
-      connection: this,
-      streamKeys: [],
-      ids: [],
-      timeoutMs,
-      timeoutId: null,
-    };
-
-    for (let i = 0; i < streamCount; i += 1) {
-      waiting.streamKeys.push(String(streamArgs[i]));
-      waiting.ids.push(String(streamArgs[streamCount + i]));
-    }
-
-    const timeoutHandle = setTimeout(() => {
-      const index = blockedXReaders.indexOf(waiting);
-      if (index !== -1) {
-        blockedXReaders.splice(index, 1);
+      for (let i = 0; i < streamCount; i += 1) {
+        waiting.streamKeys.push(String(streamArgs[i]));
+        waiting.ids.push(String(streamArgs[streamCount + i]));
       }
-      waiting.connection.write(serializeNullArray());
-    }, timeoutMs);
-    waiting.timeoutId = timeoutHandle;
-    blockedXReaders.push(waiting);
-    return null;
-  }
 
-  if (commandName === "XRANGE") {
-    const key = commandArray[1];
-    const startRaw = commandArray[2];
-    const endRaw = commandArray[3];
-
-    if (key === undefined || startRaw === undefined || endRaw === undefined) {
-      return serializeRESPValue([]);
+      blockedXReaders.push(waiting);
+      return null;
     }
 
-    const streamEntry = store.get(String(key));
-    if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
-      return serializeRESPValue([]);
-    }
-
-    const start = normalizeStreamRangeId(String(startRaw), false);
-    const end = normalizeStreamRangeId(String(endRaw), true);
-
-    if (!start || !end) {
-      return serializeRESPValue([]);
-    }
-
+    if (timeoutMs < 0) {
     const matches = streamEntry.entries.filter((entry) => {
       const entryId = parseStreamEntryId(entry.id);
       if (!entryId) {
