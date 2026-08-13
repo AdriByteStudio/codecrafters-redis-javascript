@@ -1,5 +1,7 @@
 const net = require("net");
 
+const store = new Map();
+
 function readLine(buffer, offset) {
   const end = buffer.indexOf("\r\n", offset);
   if (end === -1) {
@@ -122,6 +124,10 @@ function serializeBulkString(value) {
   return `$${length}\r\n${text}\r\n`;
 }
 
+function serializeNullBulkString() {
+  return "$-1\r\n";
+}
+
 function handleCommand(commandArray) {
   if (!Array.isArray(commandArray) || commandArray.length === 0) {
     return null;
@@ -136,6 +142,32 @@ function handleCommand(commandArray) {
   if (commandName === "ECHO") {
     const argument = commandArray[1] ?? "";
     return serializeBulkString(argument);
+  }
+
+  if (commandName === "SET") {
+    const key = commandArray[1];
+    const value = commandArray[2];
+
+    if (key === undefined || value === undefined) {
+      return null;
+    }
+
+    store.set(String(key), String(value));
+    return "+OK\r\n";
+  }
+
+  if (commandName === "GET") {
+    const key = commandArray[1];
+    if (key === undefined) {
+      return serializeNullBulkString();
+    }
+
+    const value = store.get(String(key));
+    if (value === undefined) {
+      return serializeNullBulkString();
+    }
+
+    return serializeBulkString(value);
   }
 
   return null;
