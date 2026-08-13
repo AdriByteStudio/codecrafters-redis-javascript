@@ -627,6 +627,50 @@ function handleCommand(commandArray) {
 
   if (commandName === "XRANGE") {
     const key = commandArray[1];
+    const startRaw = commandArray[2];
+    const endRaw = commandArray[3];
+
+    if (key === undefined || startRaw === undefined || endRaw === undefined) {
+      return serializeRESPValue([]);
+    }
+
+    const streamEntry = store.get(String(key));
+    if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
+      return serializeRESPValue([]);
+    }
+
+    const start = normalizeStreamRangeId(String(startRaw), false);
+    const end = normalizeStreamRangeId(String(endRaw), true);
+
+    if (!start || !end) {
+      return serializeRESPValue([]);
+    }
+
+    const matches = streamEntry.entries.filter((entry) => {
+      const entryId = parseStreamEntryId(entry.id);
+      if (!entryId) {
+        return false;
+      }
+
+      const startComparison = compareStreamEntryIds(entry.id, `${start.milliseconds}-${start.sequence}`);
+      const endComparison = compareStreamEntryIds(entry.id, `${end.milliseconds}-${end.sequence}`);
+
+      return startComparison >= 0 && endComparison <= 0;
+    });
+
+    const response = matches.map((entry) => {
+      const pairValues = [];
+      for (const [field, value] of Object.entries(entry.fields)) {
+        pairValues.push(field, value);
+      }
+      return [entry.id, pairValues];
+    });
+
+    return serializeRESPValue(response);
+  }
+
+  if (commandName === "RPUSH") {
+    const key = commandArray[1];
 
     if (key === undefined || commandArray.length < 3) {
       return null;
