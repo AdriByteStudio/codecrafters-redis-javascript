@@ -356,7 +356,11 @@ function handleCommand(commandArray) {
 
     let resolvedEntryId = String(entryId);
 
-    if (resolvedEntryId.endsWith("-*")) {
+    if (resolvedEntryId === "*") {
+      const timePart = Date.now();
+      const sequence = 0;
+      resolvedEntryId = `${timePart}-${sequence}`;
+    } else if (resolvedEntryId.endsWith("-*")) {
       const base = resolvedEntryId.slice(0, -2);
       const timePart = Number(base);
       if (Number.isNaN(timePart)) {
