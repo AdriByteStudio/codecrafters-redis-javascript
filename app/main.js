@@ -1039,6 +1039,7 @@ server.listen(port, "127.0.0.1", () => {
         masterConnection.write(serializeRESPValue(["REPLCONF", "capa", "psync2"]));
         handshakeStep = 2;
       } else if (handshakeStep === 2 && parsed.value === "OK") {
+        masterConnection.write(serializeRESPValue(["PSYNC", "?", "-1"]));
         handshakeStep = 3;
       }
     }
