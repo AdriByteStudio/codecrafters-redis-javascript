@@ -422,7 +422,8 @@ function handleCommand(commandArray, transactionState) {
 
     const key = commandArray[1];
     if (key !== undefined) {
-      transactionState.watchedKeys.add(String(key));
+      const watchedKey = String(key);
+      transactionState.watchedKeys.set(watchedKey, keyVersions.get(watchedKey) ?? 0);
     }
     return "+OK\r\n";
   }
@@ -445,8 +446,16 @@ function handleCommand(commandArray, transactionState) {
   if (commandName === "EXEC") {
     if (transactionState.active) {
       const queuedCommands = transactionState.commands;
+      const watchedKeyChanged = [...transactionState.watchedKeys.entries()].some(
+        ([key, version]) => (keyVersions.get(key) ?? 0) !== version,
+      );
       transactionState.active = false;
       transactionState.commands = [];
+      transactionState.watchedKeys.clear();
+
+      if (watchedKeyChanged) {
+        return serializeNullArray();
+      }
 
       const responses = queuedCommands.map((queuedCommand) => (
         handleCommand.call(this, queuedCommand, transactionState)
@@ -465,6 +474,7 @@ function handleCommand(commandArray, transactionState) {
 
     transactionState.active = false;
     transactionState.commands = [];
+  transactionState.watchedKeys.clear();
     return "+OK\r\n";
   }
 
@@ -918,7 +928,7 @@ function handleCommand(commandArray, transactionState) {
 
 const server = net.createServer((connection) => {
   let buffer = Buffer.alloc(0);
-  const transactionState = { active: false, commands: [], watchedKeys: new Set() };
+  const transactionState = { active: false, commands: [], watchedKeys: new Map() };
 
   connection.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
