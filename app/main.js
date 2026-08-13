@@ -22,13 +22,18 @@ const dirIndex = process.argv.indexOf("--dir");
 const rdbDirectory = dirIndex === -1 ? process.cwd() : String(process.argv[dirIndex + 1] ?? "");
 const dbFilenameIndex = process.argv.indexOf("--dbfilename");
 const rdbFilename = dbFilenameIndex === -1 ? "" : String(process.argv[dbFilenameIndex + 1] ?? "");
+function readOption(name, defaultValue) {
+  const index = process.argv.indexOf(`--${name}`);
+  return index === -1 ? defaultValue : String(process.argv[index + 1] ?? "");
+}
+
 const configuration = {
   dir: rdbDirectory,
   dbfilename: rdbFilename,
-  appendonly: "no",
-  appenddirname: "appendonlydir",
-  appendfilename: "appendonly.aof",
-  appendfsync: "everysec",
+  appendonly: readOption("appendonly", "no"),
+  appenddirname: readOption("appenddirname", "appendonlydir"),
+  appendfilename: readOption("appendfilename", "appendonly.aof"),
+  appendfsync: readOption("appendfsync", "everysec"),
 };
 
 function markKeyModified(key) {
