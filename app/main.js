@@ -16,6 +16,10 @@ const emptyRdbFile = Buffer.from(
 const replicaOfIndex = process.argv.indexOf("--replicaof");
 const replicaOf = replicaOfIndex === -1 ? "" : String(process.argv[replicaOfIndex + 1] ?? "");
 const [masterHost, masterPort] = replicaOf.trim().split(/\s+/);
+const dirIndex = process.argv.indexOf("--dir");
+const rdbDirectory = dirIndex === -1 ? "" : String(process.argv[dirIndex + 1] ?? "");
+const dbFilenameIndex = process.argv.indexOf("--dbfilename");
+const rdbFilename = dbFilenameIndex === -1 ? "" : String(process.argv[dbFilenameIndex + 1] ?? "");
 
 function markKeyModified(key) {
   const version = keyVersions.get(key) ?? 0;
@@ -475,6 +479,19 @@ function handleCommand(commandArray, transactionState, connection) {
 
   if (commandName === "PING") {
     return "+PONG\r\n";
+  }
+
+  if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
+    const parameter = String(commandArray[2] ?? "").toLowerCase();
+    if (parameter === "dir") {
+      return serializeRESPValue(["dir", rdbDirectory]);
+    }
+
+    if (parameter === "dbfilename") {
+      return serializeRESPValue(["dbfilename", rdbFilename]);
+    }
+
+    return serializeRESPValue([]);
   }
 
   if (commandName === "REPLCONF") {
