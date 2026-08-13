@@ -417,6 +417,10 @@ function handleCommand(commandArray) {
     return "+OK\r\n";
   }
 
+  if (commandName === "EXEC") {
+    return serializeError("EXEC without MULTI");
+  }
+
   if (commandName === "ECHO") {
     const argument = commandArray[1] ?? "";
     return serializeBulkString(argument);
