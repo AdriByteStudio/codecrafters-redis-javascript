@@ -594,49 +594,38 @@ function handleCommand(commandArray) {
       return serializeRESPValue(result);
     }
 
-    if (timeoutMs === 0) {
-      const waiting = {
-        connection: this,
-        streamKeys: [],
-        ids: [],
-        timeoutMs: 0,
-        timeoutId: null,
-      };
-
-      for (let i = 0; i < streamCount; i += 1) {
-        waiting.streamKeys.push(String(streamArgs[i]));
-        waiting.ids.push(String(streamArgs[streamCount + i]));
-      }
-
-      blockedXReaders.push(waiting);
-      return null;
+    if (timeoutMs < 0) {
+      return serializeNullArray();
     }
 
-    if (timeoutMs < 0) {
-    const matches = streamEntry.entries.filter((entry) => {
-      const entryId = parseStreamEntryId(entry.id);
-      if (!entryId) {
-        return false;
-      }
+    const waiting = {
+      connection: this,
+      streamKeys: [],
+      ids: [],
+      timeoutMs,
+      timeoutId: null,
+    };
 
-      const startComparison = compareStreamEntryIds(entry.id, `${start.milliseconds}-${start.sequence}`);
-      const endComparison = compareStreamEntryIds(entry.id, `${end.milliseconds}-${end.sequence}`);
+    for (let i = 0; i < streamCount; i += 1) {
+      waiting.streamKeys.push(String(streamArgs[i]));
+      waiting.ids.push(String(streamArgs[streamCount + i]));
+    }
 
-      return startComparison >= 0 && endComparison <= 0;
-    });
+    if (timeoutMs > 0) {
+      waiting.timeoutId = setTimeout(() => {
+        const index = blockedXReaders.indexOf(waiting);
+        if (index !== -1) {
+          blockedXReaders.splice(index, 1);
+        }
+        waiting.connection.write(serializeNullArray());
+      }, timeoutMs);
+    }
 
-    const response = matches.map((entry) => {
-      const pairValues = [];
-      for (const [field, value] of Object.entries(entry.fields)) {
-        pairValues.push(field, value);
-      }
-      return [entry.id, pairValues];
-    });
-
-    return serializeRESPValue(response);
+    blockedXReaders.push(waiting);
+    return null;
   }
 
-  if (commandName === "RPUSH") {
+  if (commandName === "XRANGE") {
     const key = commandArray[1];
 
     if (key === undefined || commandArray.length < 3) {
