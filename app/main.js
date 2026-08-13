@@ -274,6 +274,13 @@ function normalizeStreamRangeId(rawId, isEnd) {
     };
   }
 
+  if (rawId === "+") {
+    return {
+      milliseconds: Number.MAX_SAFE_INTEGER,
+      sequence: Number.MAX_SAFE_INTEGER,
+    };
+  }
+
   if (rawId.includes("-")) {
     return parseStreamEntryId(rawId);
   }
