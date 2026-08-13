@@ -642,6 +642,12 @@ function handleCommand(commandArray, transactionState, connection) {
     return "+PONG\r\n";
   }
 
+  if (commandName === "SUBSCRIBE") {
+    const channel = String(commandArray[1] ?? "");
+    transactionState.subscriptions.add(channel);
+    return `*3\r\n${serializeBulkString("subscribe")}${serializeBulkString(channel)}${serializeInteger(transactionState.subscriptions.size)}`;
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
@@ -1220,7 +1226,7 @@ function handleCommand(commandArray, transactionState, connection) {
 
 const server = net.createServer((connection) => {
   let buffer = Buffer.alloc(0);
-  const transactionState = { active: false, commands: [], watchedKeys: new Map() };
+  const transactionState = { active: false, commands: [], watchedKeys: new Map(), subscriptions: new Set() };
 
   connection.on("close", () => {
     replicaConnections.delete(connection);
