@@ -1,6 +1,7 @@
 const net = require("net");
 
 const store = new Map();
+const blockedClients = new Map();
 
 function readLine(buffer, offset) {
   const end = buffer.indexOf("\r\n", offset);
@@ -138,6 +139,10 @@ function serializeArray(items) {
   return `*${values.length}\r\n${payload}`;
 }
 
+function serializeNullArray() {
+  return "*-1\r\n";
+}
+
 function pruneExpiredKeys() {
   const now = Date.now();
   for (const [key, entry] of store.entries()) {
@@ -241,6 +246,7 @@ function handleCommand(commandArray) {
     }
 
     store.set(listKey, { value: list, expiresAt: existing?.expiresAt ?? null });
+    maybeWakeBlockedClient(listKey);
     return serializeInteger(list.length);
   }
 
@@ -308,6 +314,29 @@ function handleCommand(commandArray) {
     return serializeArray(removed);
   }
 
+  if (commandName === "BLPOP") {
+    const key = commandArray[1];
+    const timeout = commandArray[2];
+
+    if (key === undefined || timeout === undefined) {
+      return serializeNullArray();
+    }
+
+    const listKey = String(key);
+    const item = getStoredValue(listKey);
+    if (Array.isArray(item) && item.length > 0) {
+      const [removed] = item;
+      const remaining = item.slice(1);
+      store.set(listKey, { value: remaining, expiresAt: null });
+      return serializeArray([listKey, removed]);
+    }
+
+    const waiting = blockedClients.get(listKey) ?? [];
+    waiting.push({ key: listKey, connection: this });
+    blockedClients.set(listKey, waiting);
+    return null;
+  }
+
   if (commandName === "LRANGE") {
     const key = commandArray[1];
     const startRaw = Number(commandArray[2]);
@@ -357,7 +386,7 @@ const server = net.createServer((connection) => {
         break;
       }
 
-      const response = handleCommand(parsed.value);
+      const response = handleCommand.call(connection, parsed.value);
       if (response) {
         connection.write(response);
       }
@@ -366,5 +395,33 @@ const server = net.createServer((connection) => {
     }
   });
 });
+
+function maybeWakeBlockedClient(listKey) {
+  const waiting = blockedClients.get(listKey);
+  if (!waiting || waiting.length === 0) {
+    return;
+  }
+
+  const next = waiting.shift();
+  if (!next) {
+    return;
+  }
+
+  const item = getStoredValue(listKey);
+  if (!item || !Array.isArray(item) || item.length === 0) {
+    return;
+  }
+
+  const [removed] = item;
+  const remaining = item.slice(1);
+  store.set(listKey, { value: remaining, expiresAt: null });
+  next.connection.write(serializeArray([listKey, removed]));
+
+  if (waiting.length === 0) {
+    blockedClients.delete(listKey);
+  } else {
+    blockedClients.set(listKey, waiting);
+  }
+}
 
 server.listen(6379, "127.0.0.1");
