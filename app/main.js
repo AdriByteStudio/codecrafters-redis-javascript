@@ -1047,6 +1047,7 @@ server.listen(port, "127.0.0.1", () => {
   let handshakeStep = 0;
   let masterResponse = Buffer.alloc(0);
   let rdbLength = null;
+  let replicationOffset = 0;
   const replicaTransactionState = { active: false, commands: [], watchedKeys: new Map() };
   masterConnection.on("data", (chunk) => {
     masterResponse = Buffer.concat([masterResponse, chunk]);
@@ -1078,15 +1079,17 @@ server.listen(port, "127.0.0.1", () => {
         break;
       }
 
+      const commandLength = parsed.nextOffset;
       masterResponse = masterResponse.slice(parsed.nextOffset);
       if (handshakeStep === 5) {
         const propagatedCommand = String(parsed.value[0] ?? "").toUpperCase();
         const propagatedOption = String(parsed.value[1] ?? "").toUpperCase();
         if (propagatedCommand === "REPLCONF" && propagatedOption === "GETACK") {
-          masterConnection.write(serializeRESPValue(["REPLCONF", "ACK", "0"]));
+          masterConnection.write(serializeRESPValue(["REPLCONF", "ACK", String(replicationOffset)]));
         } else {
           handleCommand.call(masterConnection, parsed.value, replicaTransactionState, masterConnection);
         }
+        replicationOffset += commandLength;
       } else if (handshakeStep === 0 && parsed.value === "PONG") {
         masterConnection.write(serializeRESPValue(["REPLCONF", "listening-port", String(port)]));
         handshakeStep = 1;
