@@ -279,6 +279,24 @@ function handleCommand(commandArray) {
     return serializeInteger(item.length);
   }
 
+  if (commandName === "LPOP") {
+    const key = commandArray[1];
+    if (key === undefined) {
+      return serializeNullBulkString();
+    }
+
+    const listKey = String(key);
+    const item = getStoredValue(listKey);
+    if (!item || !Array.isArray(item) || item.length === 0) {
+      return serializeNullBulkString();
+    }
+
+    const [removed] = item;
+    const remaining = item.slice(1);
+    store.set(listKey, { value: remaining, expiresAt: null });
+    return serializeBulkString(removed);
+  }
+
   if (commandName === "LRANGE") {
     const key = commandArray[1];
     const startRaw = Number(commandArray[2]);
