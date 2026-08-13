@@ -647,6 +647,7 @@ function handleCommand(commandArray, transactionState) {
 
     stream.entries.push({ id: resolvedEntryId, fields });
     store.set(streamKey, { type: "stream", entries: stream.entries, expiresAt: null });
+    markKeyModified(streamKey);
     maybeWakeBlockedXReaders(streamKey);
     return serializeBulkString(resolvedEntryId);
   }
@@ -793,6 +794,7 @@ function handleCommand(commandArray, transactionState) {
     }
 
     store.set(listKey, { value: list, expiresAt: existing?.expiresAt ?? null });
+  markKeyModified(listKey);
     maybeWakeBlockedClient(listKey);
     return serializeInteger(list.length);
   }
@@ -815,6 +817,7 @@ function handleCommand(commandArray, transactionState) {
 
     const nextList = [...newItems, ...list];
     store.set(listKey, { value: nextList, expiresAt: existing?.expiresAt ?? null });
+  markKeyModified(listKey);
     return serializeInteger(nextList.length);
   }
 
@@ -853,6 +856,7 @@ function handleCommand(commandArray, transactionState) {
     const removed = item.slice(0, removedCount);
     const remaining = item.slice(removedCount);
     store.set(listKey, { value: remaining, expiresAt: null });
+    markKeyModified(listKey);
 
     if (removedCount === 1) {
       return serializeBulkString(removed[0]);
@@ -875,6 +879,7 @@ function handleCommand(commandArray, transactionState) {
       const [removed] = item;
       const remaining = item.slice(1);
       store.set(listKey, { value: remaining, expiresAt: null });
+      markKeyModified(listKey);
       return serializeArray([listKey, removed]);
     }
 
@@ -968,6 +973,7 @@ function maybeWakeBlockedClient(listKey) {
   const [removed] = item;
   const remaining = item.slice(1);
   store.set(listKey, { value: remaining, expiresAt: null });
+  markKeyModified(listKey);
   next.connection.write(serializeArray([listKey, removed]));
 
   if (waiting.length === 0) {
