@@ -420,8 +420,7 @@ function handleCommand(commandArray, transactionState) {
       return serializeError("WATCH inside MULTI is not allowed");
     }
 
-    const key = commandArray[1];
-    if (key !== undefined) {
+    for (const key of commandArray.slice(1)) {
       const watchedKey = String(key);
       transactionState.watchedKeys.set(watchedKey, keyVersions.get(watchedKey) ?? 0);
     }
