@@ -7,6 +7,9 @@ const keyVersions = new Map();
 const serverRole = process.argv.includes("--replicaof") ? "slave" : "master";
 const masterReplicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
 const masterReplicationOffset = 0;
+const replicaOfIndex = process.argv.indexOf("--replicaof");
+const replicaOf = replicaOfIndex === -1 ? "" : String(process.argv[replicaOfIndex + 1] ?? "");
+const [masterHost, masterPort] = replicaOf.trim().split(/\s+/);
 
 function markKeyModified(key) {
   const version = keyVersions.get(key) ?? 0;
@@ -1007,4 +1010,15 @@ const portIndex = process.argv.indexOf("--port");
 const configuredPort = portIndex === -1 ? NaN : Number(process.argv[portIndex + 1]);
 const port = Number.isInteger(configuredPort) ? configuredPort : 6379;
 
-server.listen(port, "127.0.0.1");
+server.listen(port, "127.0.0.1", () => {
+  const masterPortNumber = Number(masterPort);
+  if (serverRole !== "slave" || !masterHost || !Number.isInteger(masterPortNumber)) {
+    return;
+  }
+
+  const masterConnection = net.createConnection({ host: masterHost, port: masterPortNumber });
+  masterConnection.on("connect", () => {
+    masterConnection.write("*1\r\n$4\r\nPING\r\n");
+  });
+  masterConnection.on("error", () => {});
+});
