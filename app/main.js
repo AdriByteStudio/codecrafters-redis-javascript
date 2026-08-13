@@ -3,6 +3,35 @@ const net = require("net");
 const store = new Map();
 const blockedClients = new Map();
 
+function scheduleBLPOPTimeout(connection, listKey, timeoutSeconds) {
+  if (timeoutSeconds <= 0) {
+    return null;
+  }
+
+  return setTimeout(() => {
+    const waiting = blockedClients.get(listKey);
+    if (!waiting || waiting.length === 0) {
+      return;
+    }
+
+    const index = waiting.findIndex((entry) => entry.connection === connection);
+    if (index === -1) {
+      return;
+    }
+
+    const [removedEntry] = waiting.splice(index, 1);
+    if (waiting.length === 0) {
+      blockedClients.delete(listKey);
+    } else {
+      blockedClients.set(listKey, waiting);
+    }
+
+    if (removedEntry) {
+      connection.write(serializeNullArray());
+    }
+  }, timeoutSeconds * 1000);
+}
+
 function readLine(buffer, offset) {
   const end = buffer.indexOf("\r\n", offset);
   if (end === -1) {
@@ -334,6 +363,11 @@ function handleCommand(commandArray) {
     const waiting = blockedClients.get(listKey) ?? [];
     waiting.push({ key: listKey, connection: this });
     blockedClients.set(listKey, waiting);
+
+    if (Number(timeout) > 0) {
+      scheduleBLPOPTimeout(this, listKey, Number(timeout));
+    }
+
     return null;
   }
 
