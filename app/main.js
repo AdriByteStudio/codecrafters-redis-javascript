@@ -260,8 +260,23 @@ function handleCommand(commandArray) {
       newItems.push(String(commandArray[i]));
     }
 
-    store.set(listKey, { value: [...newItems, ...list], expiresAt: existing?.expiresAt ?? null });
-    return serializeInteger([...newItems, ...list].length);
+    const nextList = [...newItems, ...list];
+    store.set(listKey, { value: nextList, expiresAt: existing?.expiresAt ?? null });
+    return serializeInteger(nextList.length);
+  }
+
+  if (commandName === "LLEN") {
+    const key = commandArray[1];
+    if (key === undefined) {
+      return serializeInteger(0);
+    }
+
+    const item = getStoredValue(String(key));
+    if (!item || !Array.isArray(item)) {
+      return serializeInteger(0);
+    }
+
+    return serializeInteger(item.length);
   }
 
   if (commandName === "LRANGE") {
