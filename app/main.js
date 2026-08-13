@@ -1234,7 +1234,9 @@ const configuredPort = portIndex === -1 ? NaN : Number(process.argv[portIndex + 
 const port = Number.isInteger(configuredPort) ? configuredPort : 6379;
 
 if (configuration.appendonly === "yes") {
-  fs.mkdirSync(path.join(configuration.dir, configuration.appenddirname), { recursive: true });
+  const appendOnlyDirectory = path.join(configuration.dir, configuration.appenddirname);
+  fs.mkdirSync(appendOnlyDirectory, { recursive: true });
+  fs.closeSync(fs.openSync(path.join(appendOnlyDirectory, `${configuration.appendfilename}.1.incr.aof`), "a"));
 }
 
 loadRdbFile();
