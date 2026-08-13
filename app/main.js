@@ -477,7 +477,7 @@ function handleCommand(commandArray) {
   }
 
   if (commandName === "XREAD") {
-    const streamsIndex = commandArray.indexOf("STREAMS");
+    const streamsIndex = commandArray.findIndex((arg) => String(arg).toUpperCase() === "STREAMS");
     if (streamsIndex === -1) {
       return serializeNullArray();
     }
