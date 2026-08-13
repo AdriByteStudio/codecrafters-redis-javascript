@@ -354,11 +354,37 @@ function handleCommand(commandArray) {
     const stream = existing && existing.type === "stream" ? existing : { type: "stream", entries: [] };
     const lastEntry = stream.entries.length > 0 ? stream.entries[stream.entries.length - 1] : null;
 
-    if (String(entryId) === "0-0") {
+    let resolvedEntryId = String(entryId);
+
+    if (resolvedEntryId.endsWith("-*")) {
+      const base = resolvedEntryId.slice(0, -2);
+      const timePart = Number(base);
+      if (Number.isNaN(timePart)) {
+        return serializeError("The ID specified in XADD is equal or smaller than the target stream top item");
+      }
+
+      let nextSequence = 0;
+      if (lastEntry) {
+        const lastId = parseStreamEntryId(lastEntry.id);
+        if (lastId && lastId.milliseconds === timePart) {
+          nextSequence = lastId.sequence + 1;
+        } else if (lastId && lastId.milliseconds > timePart) {
+          return serializeError("The ID specified in XADD is equal or smaller than the target stream top item");
+        }
+      }
+
+      if (timePart === 0 && lastEntry === null) {
+        nextSequence = 1;
+      }
+
+      resolvedEntryId = `${timePart}-${nextSequence}`;
+    }
+
+    if (resolvedEntryId === "0-0") {
       return serializeError("The ID specified in XADD must be greater than 0-0");
     }
 
-    if (!isValidStreamEntryId(String(entryId), lastEntry ? lastEntry.id : null)) {
+    if (!isValidStreamEntryId(resolvedEntryId, lastEntry ? lastEntry.id : null)) {
       return serializeError("The ID specified in XADD is equal or smaller than the target stream top item");
     }
 
@@ -367,9 +393,9 @@ function handleCommand(commandArray) {
       fields[String(args[i])] = String(args[i + 1]);
     }
 
-    stream.entries.push({ id: String(entryId), fields });
+    stream.entries.push({ id: resolvedEntryId, fields });
     store.set(streamKey, { type: "stream", entries: stream.entries, expiresAt: null });
-    return serializeBulkString(String(entryId));
+    return serializeBulkString(resolvedEntryId);
   }
 
   if (commandName === "RPUSH") {
