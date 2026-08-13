@@ -4,6 +4,7 @@ const store = new Map();
 const blockedClients = new Map();
 const blockedXReaders = [];
 const keyVersions = new Map();
+const replicaConnections = new Set();
 const serverRole = process.argv.includes("--replicaof") ? "slave" : "master";
 const masterReplicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
 const masterReplicationOffset = 0;
@@ -418,7 +419,7 @@ function maybeWakeBlockedXReaders(streamKey) {
   }
 }
 
-function handleCommand(commandArray, transactionState) {
+function handleCommand(commandArray, transactionState, connection) {
   if (!Array.isArray(commandArray) || commandArray.length === 0) {
     return null;
   }
@@ -456,6 +457,7 @@ function handleCommand(commandArray, transactionState) {
   }
 
   if (commandName === "PSYNC") {
+    replicaConnections.add(connection);
     const fullResync = Buffer.from(`+FULLRESYNC ${masterReplicationId} ${masterReplicationOffset}\r\n`);
     const rdbHeader = Buffer.from(`$${emptyRdbFile.length}\r\n`);
     return Buffer.concat([fullResync, rdbHeader, emptyRdbFile]);
@@ -551,6 +553,10 @@ function handleCommand(commandArray, transactionState) {
     const storeKey = String(key);
     store.set(storeKey, { value, expiresAt });
     markKeyModified(storeKey);
+    const command = serializeRESPValue(commandArray);
+    for (const replicaConnection of replicaConnections) {
+      replicaConnection.write(command);
+    }
     return "+OK\r\n";
   }
 
@@ -972,6 +978,10 @@ const server = net.createServer((connection) => {
   let buffer = Buffer.alloc(0);
   const transactionState = { active: false, commands: [], watchedKeys: new Map() };
 
+  connection.on("close", () => {
+    replicaConnections.delete(connection);
+  });
+
   connection.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
 
@@ -981,7 +991,7 @@ const server = net.createServer((connection) => {
         break;
       }
 
-      const response = handleCommand.call(connection, parsed.value, transactionState);
+      const response = handleCommand.call(connection, parsed.value, transactionState, connection);
       if (response) {
         connection.write(response);
       }
