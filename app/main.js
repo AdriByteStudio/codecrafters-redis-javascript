@@ -8,6 +8,7 @@ const blockedXReaders = [];
 const keyVersions = new Map();
 const replicaConnections = new Set();
 const pendingWaits = new Set();
+let isReplayingAof = false;
 const serverRole = process.argv.includes("--replicaof") ? "slave" : "master";
 const masterReplicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
 let masterReplicationOffset = 0;
@@ -176,11 +177,38 @@ function getActiveAofPath() {
 }
 
 function appendAofCommand(command) {
-  if (configuration.appendonly !== "yes") {
+  if (configuration.appendonly !== "yes" || isReplayingAof) {
     return;
   }
 
   fs.appendFileSync(getActiveAofPath(), command);
+}
+
+function replayAofFile() {
+  if (configuration.appendonly !== "yes") {
+    return;
+  }
+
+  const aofPath = getActiveAofPath();
+  if (!fs.existsSync(aofPath)) {
+    return;
+  }
+
+  const transactionState = { active: false, commands: [], watchedKeys: new Map() };
+  const buffer = fs.readFileSync(aofPath);
+  let offset = 0;
+
+  isReplayingAof = true;
+  while (offset < buffer.length) {
+    const parsed = parseRESP(buffer, offset);
+    if (!parsed.complete) {
+      return;
+    }
+
+    handleCommand(parsed.value, transactionState, null);
+    offset = parsed.nextOffset;
+  }
+  isReplayingAof = false;
 }
 
 function scheduleBLPOPTimeout(connection, listKey, timeoutSeconds) {
@@ -1262,6 +1290,7 @@ if (configuration.appendonly === "yes") {
 }
 
 loadRdbFile();
+replayAofFile();
 
 server.listen(port, "127.0.0.1", () => {
   const masterPortNumber = Number(masterPort);
