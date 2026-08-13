@@ -987,4 +987,8 @@ function maybeWakeBlockedClient(listKey) {
   }
 }
 
-server.listen(6379, "127.0.0.1");
+const portIndex = process.argv.indexOf("--port");
+const configuredPort = portIndex === -1 ? NaN : Number(process.argv[portIndex + 1]);
+const port = Number.isInteger(configuredPort) ? configuredPort : 6379;
+
+server.listen(port, "127.0.0.1");
