@@ -451,6 +451,10 @@ function handleCommand(commandArray, transactionState) {
     return "+OK\r\n";
   }
 
+  if (commandName === "PSYNC") {
+    return `+FULLRESYNC ${masterReplicationId} ${masterReplicationOffset}\r\n`;
+  }
+
   if (commandName === "INFO") {
     const section = String(commandArray[1] ?? "").toLowerCase();
     if (section === "replication") {
