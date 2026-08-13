@@ -487,11 +487,12 @@ function handleCommand(commandArray) {
       return serializeNullArray();
     }
 
+    const streamCount = streamArgs.length / 2;
     const result = [];
 
-    for (let i = 0; i < streamArgs.length; i += 2) {
+    for (let i = 0; i < streamCount; i += 1) {
       const streamKey = String(streamArgs[i]);
-      const startId = String(streamArgs[i + 1]);
+      const startId = String(streamArgs[streamCount + i]);
       const streamEntry = store.get(streamKey);
 
       if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
