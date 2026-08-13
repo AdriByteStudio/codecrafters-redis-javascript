@@ -424,6 +424,10 @@ function handleCommand(commandArray, transactionState) {
     return "+OK\r\n";
   }
 
+  if (commandName === "WATCH") {
+    return "+OK\r\n";
+  }
+
   if (commandName === "EXEC") {
     if (transactionState.active) {
       const queuedCommands = transactionState.commands;
