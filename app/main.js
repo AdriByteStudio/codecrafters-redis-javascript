@@ -409,7 +409,7 @@ function handleCommand(commandArray, transactionState) {
 
   const commandName = String(commandArray[0]).toUpperCase();
 
-  if (transactionState.active && commandName !== "MULTI" && commandName !== "EXEC") {
+  if (transactionState.active && commandName !== "MULTI" && commandName !== "EXEC" && commandName !== "DISCARD") {
     transactionState.commands.push(commandArray);
     return "+QUEUED\r\n";
   }
@@ -438,6 +438,16 @@ function handleCommand(commandArray, transactionState) {
     }
 
     return serializeError("EXEC without MULTI");
+  }
+
+  if (commandName === "DISCARD") {
+    if (!transactionState.active) {
+      return serializeError("DISCARD without MULTI");
+    }
+
+    transactionState.active = false;
+    transactionState.commands = [];
+    return "+OK\r\n";
   }
 
   if (commandName === "ECHO") {
