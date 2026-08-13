@@ -5,9 +5,10 @@ const blockedClients = new Map();
 const blockedXReaders = [];
 const keyVersions = new Map();
 const replicaConnections = new Set();
+const pendingWaits = new Set();
 const serverRole = process.argv.includes("--replicaof") ? "slave" : "master";
 const masterReplicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
-const masterReplicationOffset = 0;
+let masterReplicationOffset = 0;
 const emptyRdbFile = Buffer.from(
   "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==",
   "base64",
@@ -19,6 +20,30 @@ const [masterHost, masterPort] = replicaOf.trim().split(/\s+/);
 function markKeyModified(key) {
   const version = keyVersions.get(key) ?? 0;
   keyVersions.set(key, version + 1);
+}
+
+function countAcknowledgedReplicas(offset) {
+  let count = 0;
+  for (const replicaConnection of replicaConnections) {
+    if ((replicaConnection.replicationOffset ?? 0) >= offset) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function completeWait(waiting) {
+  clearTimeout(waiting.timeoutId);
+  pendingWaits.delete(waiting);
+  waiting.connection.write(serializeInteger(countAcknowledgedReplicas(waiting.targetOffset)));
+}
+
+function resolveAcknowledgedWaits() {
+  for (const waiting of [...pendingWaits]) {
+    if (countAcknowledgedReplicas(waiting.targetOffset) >= waiting.requiredReplicas) {
+      completeWait(waiting);
+    }
+  }
 }
 
 function scheduleBLPOPTimeout(connection, listKey, timeoutSeconds) {
@@ -453,10 +478,18 @@ function handleCommand(commandArray, transactionState, connection) {
   }
 
   if (commandName === "REPLCONF") {
+    const option = String(commandArray[1] ?? "").toUpperCase();
+    if (option === "ACK") {
+      connection.replicationOffset = Number(commandArray[2]) || 0;
+      resolveAcknowledgedWaits();
+      return null;
+    }
+
     return "+OK\r\n";
   }
 
   if (commandName === "PSYNC") {
+    connection.replicationOffset = 0;
     replicaConnections.add(connection);
     const fullResync = Buffer.from(`+FULLRESYNC ${masterReplicationId} ${masterReplicationOffset}\r\n`);
     const rdbHeader = Buffer.from(`$${emptyRdbFile.length}\r\n`);
@@ -464,7 +497,29 @@ function handleCommand(commandArray, transactionState, connection) {
   }
 
   if (commandName === "WAIT") {
-    return serializeInteger(replicaConnections.size);
+    const requiredReplicas = Number(commandArray[1]) || 0;
+    const timeoutMs = Math.max(0, Number(commandArray[2]) || 0);
+    const targetOffset = masterReplicationOffset;
+
+    if (targetOffset === 0 || countAcknowledgedReplicas(targetOffset) >= requiredReplicas) {
+      return serializeInteger(countAcknowledgedReplicas(targetOffset));
+    }
+
+    const waiting = {
+      connection,
+      requiredReplicas,
+      targetOffset,
+      timeoutId: null,
+    };
+    waiting.timeoutId = setTimeout(() => completeWait(waiting), timeoutMs);
+    pendingWaits.add(waiting);
+
+    const getAckCommand = serializeRESPValue(["REPLCONF", "GETACK", "*"]);
+    for (const replicaConnection of replicaConnections) {
+      replicaConnection.write(getAckCommand);
+    }
+
+    return null;
   }
 
   if (commandName === "INFO") {
@@ -558,6 +613,7 @@ function handleCommand(commandArray, transactionState, connection) {
     store.set(storeKey, { value, expiresAt });
     markKeyModified(storeKey);
     const command = serializeRESPValue(commandArray);
+    masterReplicationOffset += Buffer.byteLength(command);
     for (const replicaConnection of replicaConnections) {
       replicaConnection.write(command);
     }
