@@ -128,6 +128,31 @@ function serializeNullBulkString() {
   return "$-1\r\n";
 }
 
+function pruneExpiredKeys() {
+  const now = Date.now();
+  for (const [key, entry] of store.entries()) {
+    if (entry.expiresAt !== null && entry.expiresAt <= now) {
+      store.delete(key);
+    }
+  }
+}
+
+function getStoredValue(key) {
+  pruneExpiredKeys();
+
+  const item = store.get(key);
+  if (!item) {
+    return undefined;
+  }
+
+  if (item.expiresAt !== null && item.expiresAt <= Date.now()) {
+    store.delete(key);
+    return undefined;
+  }
+
+  return item.value;
+}
+
 function handleCommand(commandArray) {
   if (!Array.isArray(commandArray) || commandArray.length === 0) {
     return null;
@@ -146,13 +171,33 @@ function handleCommand(commandArray) {
 
   if (commandName === "SET") {
     const key = commandArray[1];
-    const value = commandArray[2];
+    let value = commandArray[2];
 
     if (key === undefined || value === undefined) {
       return null;
     }
 
-    store.set(String(key), String(value));
+    value = String(value);
+    let expiresAt = null;
+
+    for (let i = 3; i < commandArray.length; i += 2) {
+      const option = commandArray[i];
+      const optionValue = commandArray[i + 1];
+
+      if (option === undefined || optionValue === undefined) {
+        break;
+      }
+
+      const normalizedOption = String(option).toUpperCase();
+      if (normalizedOption === "PX") {
+        const ms = Number(optionValue);
+        if (!Number.isNaN(ms)) {
+          expiresAt = Date.now() + ms;
+        }
+      }
+    }
+
+    store.set(String(key), { value, expiresAt });
     return "+OK\r\n";
   }
 
@@ -162,7 +207,7 @@ function handleCommand(commandArray) {
       return serializeNullBulkString();
     }
 
-    const value = store.get(String(key));
+    const value = getStoredValue(String(key));
     if (value === undefined) {
       return serializeNullBulkString();
     }
