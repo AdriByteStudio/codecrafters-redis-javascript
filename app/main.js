@@ -409,6 +409,18 @@ function handleCommand(commandArray, transactionState) {
 
   const commandName = String(commandArray[0]).toUpperCase();
 
+  if (commandName === "WATCH") {
+    if (transactionState.active) {
+      return serializeError("WATCH inside MULTI is not allowed");
+    }
+
+    const key = commandArray[1];
+    if (key !== undefined) {
+      transactionState.watchedKeys.add(String(key));
+    }
+    return "+OK\r\n";
+  }
+
   if (transactionState.active && commandName !== "MULTI" && commandName !== "EXEC" && commandName !== "DISCARD") {
     transactionState.commands.push(commandArray);
     return "+QUEUED\r\n";
@@ -421,10 +433,6 @@ function handleCommand(commandArray, transactionState) {
   if (commandName === "MULTI") {
     transactionState.active = true;
     transactionState.commands = [];
-    return "+OK\r\n";
-  }
-
-  if (commandName === "WATCH") {
     return "+OK\r\n";
   }
 
@@ -898,7 +906,7 @@ function handleCommand(commandArray, transactionState) {
 
 const server = net.createServer((connection) => {
   let buffer = Buffer.alloc(0);
-  const transactionState = { active: false, commands: [] };
+  const transactionState = { active: false, commands: [], watchedKeys: new Set() };
 
   connection.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
