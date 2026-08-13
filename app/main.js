@@ -413,6 +413,10 @@ function handleCommand(commandArray) {
     return "+PONG\r\n";
   }
 
+  if (commandName === "MULTI") {
+    return "+OK\r\n";
+  }
+
   if (commandName === "ECHO") {
     const argument = commandArray[1] ?? "";
     return serializeBulkString(argument);
