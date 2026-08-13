@@ -471,8 +471,13 @@ function handleCommand(commandArray) {
     }
 
     const entry = store.get(String(key));
+    if (!entry) {
+      store.set(String(key), { value: "1", expiresAt: null });
+      return serializeInteger(1);
+    }
+
     const value = Number(entry?.value);
-    if (!entry || !Number.isInteger(value)) {
+    if (!Number.isInteger(value)) {
       return null;
     }
 
