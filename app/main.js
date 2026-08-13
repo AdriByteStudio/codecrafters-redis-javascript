@@ -322,6 +322,19 @@ function getStoredValue(key) {
   return item.value;
 }
 
+function resolveStreamStartId(streamKey, requestedId) {
+  if (requestedId !== "$") {
+    return requestedId;
+  }
+
+  const streamEntry = store.get(streamKey);
+  if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
+    return "0-0";
+  }
+
+  return streamEntry.entries[streamEntry.entries.length - 1].id;
+}
+
 function getEntriesAfterStreamId(streamKey, startId) {
   const streamEntry = store.get(streamKey);
   if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
@@ -573,7 +586,7 @@ function handleCommand(commandArray) {
 
     for (let i = 0; i < streamCount; i += 1) {
       const streamKey = String(streamArgs[i]);
-      const startId = String(streamArgs[streamCount + i]);
+      const startId = resolveStreamStartId(streamKey, String(streamArgs[streamCount + i]));
       const matches = getEntriesAfterStreamId(streamKey, startId);
       if (matches.length === 0) {
         continue;
@@ -607,8 +620,10 @@ function handleCommand(commandArray) {
     };
 
     for (let i = 0; i < streamCount; i += 1) {
-      waiting.streamKeys.push(String(streamArgs[i]));
-      waiting.ids.push(String(streamArgs[streamCount + i]));
+      const streamKey = String(streamArgs[i]);
+      const startId = resolveStreamStartId(streamKey, String(streamArgs[streamCount + i]));
+      waiting.streamKeys.push(streamKey);
+      waiting.ids.push(startId);
     }
 
     if (timeoutMs > 0) {
