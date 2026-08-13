@@ -5,6 +5,8 @@ const blockedClients = new Map();
 const blockedXReaders = [];
 const keyVersions = new Map();
 const serverRole = process.argv.includes("--replicaof") ? "slave" : "master";
+const masterReplicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+const masterReplicationOffset = 0;
 
 function markKeyModified(key) {
   const version = keyVersions.get(key) ?? 0;
@@ -445,7 +447,11 @@ function handleCommand(commandArray, transactionState) {
   if (commandName === "INFO") {
     const section = String(commandArray[1] ?? "").toLowerCase();
     if (section === "replication") {
-      return serializeBulkString(`role:${serverRole}`);
+      return serializeBulkString([
+        `role:${serverRole}`,
+        `master_replid:${masterReplicationId}`,
+        `master_repl_offset:${masterReplicationOffset}`,
+      ].join("\r\n"));
     }
 
     return serializeBulkString("");
