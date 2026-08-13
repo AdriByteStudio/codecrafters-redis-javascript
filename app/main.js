@@ -1046,17 +1046,42 @@ server.listen(port, "127.0.0.1", () => {
   });
   let handshakeStep = 0;
   let masterResponse = Buffer.alloc(0);
+  let rdbLength = null;
+  const replicaTransactionState = { active: false, commands: [], watchedKeys: new Map() };
   masterConnection.on("data", (chunk) => {
     masterResponse = Buffer.concat([masterResponse, chunk]);
 
     while (true) {
+      if (handshakeStep === 4) {
+        if (rdbLength === null) {
+          const headerEnd = masterResponse.indexOf("\r\n");
+          if (headerEnd === -1) {
+            break;
+          }
+
+          rdbLength = Number(masterResponse.toString("ascii", 1, headerEnd));
+          masterResponse = masterResponse.slice(headerEnd + 2);
+        }
+
+        if (masterResponse.length < rdbLength) {
+          break;
+        }
+
+        masterResponse = masterResponse.slice(rdbLength);
+        rdbLength = null;
+        handshakeStep = 5;
+        continue;
+      }
+
       const parsed = parseRESP(masterResponse, 0);
       if (!parsed.complete) {
         break;
       }
 
       masterResponse = masterResponse.slice(parsed.nextOffset);
-      if (handshakeStep === 0 && parsed.value === "PONG") {
+      if (handshakeStep === 5) {
+        handleCommand.call(masterConnection, parsed.value, replicaTransactionState, masterConnection);
+      } else if (handshakeStep === 0 && parsed.value === "PONG") {
         masterConnection.write(serializeRESPValue(["REPLCONF", "listening-port", String(port)]));
         handshakeStep = 1;
       } else if (handshakeStep === 1 && parsed.value === "OK") {
@@ -1065,6 +1090,8 @@ server.listen(port, "127.0.0.1", () => {
       } else if (handshakeStep === 2 && parsed.value === "OK") {
         masterConnection.write(serializeRESPValue(["PSYNC", "?", "-1"]));
         handshakeStep = 3;
+      } else if (handshakeStep === 3 && String(parsed.value).startsWith("FULLRESYNC")) {
+        handshakeStep = 4;
       }
     }
   });
