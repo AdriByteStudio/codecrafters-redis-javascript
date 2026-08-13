@@ -447,6 +447,10 @@ function handleCommand(commandArray, transactionState) {
     return "+PONG\r\n";
   }
 
+  if (commandName === "REPLCONF") {
+    return "+OK\r\n";
+  }
+
   if (commandName === "INFO") {
     const section = String(commandArray[1] ?? "").toLowerCase();
     if (section === "replication") {
