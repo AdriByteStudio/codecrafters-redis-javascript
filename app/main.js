@@ -478,7 +478,7 @@ function handleCommand(commandArray) {
 
     const value = Number(entry?.value);
     if (!Number.isInteger(value)) {
-      return null;
+      return serializeError("value is not an integer or out of range");
     }
 
     const incrementedValue = value + 1;
