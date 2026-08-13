@@ -464,6 +464,23 @@ function handleCommand(commandArray) {
     return serializeBulkString(value);
   }
 
+  if (commandName === "INCR") {
+    const key = commandArray[1];
+    if (key === undefined) {
+      return null;
+    }
+
+    const entry = store.get(String(key));
+    const value = Number(entry?.value);
+    if (!entry || !Number.isInteger(value)) {
+      return null;
+    }
+
+    const incrementedValue = value + 1;
+    store.set(String(key), { value: String(incrementedValue), expiresAt: entry.expiresAt });
+    return serializeInteger(incrementedValue);
+  }
+
   if (commandName === "TYPE") {
     const key = commandArray[1];
     if (key === undefined) {
