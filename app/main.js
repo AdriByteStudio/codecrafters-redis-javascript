@@ -428,6 +428,11 @@ function handleCommand(commandArray, transactionState) {
     return "+OK\r\n";
   }
 
+  if (commandName === "UNWATCH") {
+    transactionState.watchedKeys.clear();
+    return "+OK\r\n";
+  }
+
   if (transactionState.active && commandName !== "MULTI" && commandName !== "EXEC" && commandName !== "DISCARD") {
     transactionState.commands.push(commandArray);
     return "+QUEUED\r\n";
