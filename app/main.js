@@ -463,6 +463,10 @@ function handleCommand(commandArray, transactionState, connection) {
     return Buffer.concat([fullResync, rdbHeader, emptyRdbFile]);
   }
 
+  if (commandName === "WAIT") {
+    return serializeInteger(0);
+  }
+
   if (commandName === "INFO") {
     const section = String(commandArray[1] ?? "").toLowerCase();
     if (section === "replication") {
