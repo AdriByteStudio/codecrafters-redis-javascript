@@ -402,7 +402,7 @@ function maybeWakeBlockedXReaders(streamKey) {
   }
 }
 
-function handleCommand(commandArray) {
+function handleCommand(commandArray, transactionState) {
   if (!Array.isArray(commandArray) || commandArray.length === 0) {
     return null;
   }
@@ -414,10 +414,16 @@ function handleCommand(commandArray) {
   }
 
   if (commandName === "MULTI") {
+    transactionState.active = true;
     return "+OK\r\n";
   }
 
   if (commandName === "EXEC") {
+    if (transactionState.active) {
+      transactionState.active = false;
+      return serializeRESPValue([]);
+    }
+
     return serializeError("EXEC without MULTI");
   }
 
@@ -865,6 +871,7 @@ function handleCommand(commandArray) {
 
 const server = net.createServer((connection) => {
   let buffer = Buffer.alloc(0);
+  const transactionState = { active: false };
 
   connection.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
@@ -875,7 +882,7 @@ const server = net.createServer((connection) => {
         break;
       }
 
-      const response = handleCommand.call(connection, parsed.value);
+      const response = handleCommand.call(connection, parsed.value, transactionState);
       if (response) {
         connection.write(response);
       }
