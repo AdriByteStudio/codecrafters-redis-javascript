@@ -267,6 +267,13 @@ function normalizeStreamRangeId(rawId, isEnd) {
     return null;
   }
 
+  if (rawId === "-") {
+    return {
+      milliseconds: 0,
+      sequence: 0,
+    };
+  }
+
   if (rawId.includes("-")) {
     return parseStreamEntryId(rawId);
   }
