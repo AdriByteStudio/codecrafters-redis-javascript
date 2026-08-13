@@ -265,6 +265,15 @@ function handleCommand(commandArray) {
       return "+none\r\n";
     }
 
+    const entry = store.get(String(key));
+    if (!entry) {
+      return "+none\r\n";
+    }
+
+    if (entry.type === "stream") {
+      return "+stream\r\n";
+    }
+
     const value = getStoredValue(String(key));
     if (value === undefined) {
       return "+none\r\n";
@@ -275,6 +284,33 @@ function handleCommand(commandArray) {
     }
 
     return "+string\r\n";
+  }
+
+  if (commandName === "XADD") {
+    const key = commandArray[1];
+    const entryId = commandArray[2];
+
+    if (key === undefined || entryId === undefined || commandArray.length < 5) {
+      return null;
+    }
+
+    const args = commandArray.slice(3);
+    if (args.length % 2 !== 0) {
+      return null;
+    }
+
+    const streamKey = String(key);
+    const existing = store.get(streamKey);
+    const stream = existing && existing.type === "stream" ? existing : { type: "stream", entries: [] };
+
+    const fields = {};
+    for (let i = 0; i < args.length; i += 2) {
+      fields[String(args[i])] = String(args[i + 1]);
+    }
+
+    stream.entries.push({ id: String(entryId), fields });
+    store.set(streamKey, { type: "stream", entries: stream.entries, expiresAt: null });
+    return serializeBulkString(String(entryId));
   }
 
   if (commandName === "RPUSH") {
