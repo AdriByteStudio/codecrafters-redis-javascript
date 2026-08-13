@@ -441,6 +441,15 @@ function handleCommand(commandArray, transactionState) {
     return "+PONG\r\n";
   }
 
+  if (commandName === "INFO") {
+    const section = String(commandArray[1] ?? "").toLowerCase();
+    if (section === "replication") {
+      return serializeBulkString("role:master");
+    }
+
+    return serializeBulkString("");
+  }
+
   if (commandName === "MULTI") {
     transactionState.active = true;
     transactionState.commands = [];
