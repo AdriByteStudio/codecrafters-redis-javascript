@@ -221,18 +221,20 @@ function handleCommand(commandArray) {
 
   if (commandName === "RPUSH") {
     const key = commandArray[1];
-    const element = commandArray[2];
 
-    if (key === undefined || element === undefined) {
+    if (key === undefined || commandArray.length < 3) {
       return null;
     }
 
     const listKey = String(key);
     const existing = store.get(listKey);
     const list = existing && Array.isArray(existing.value) ? existing.value.slice() : [];
-    list.push(String(element));
-    store.set(listKey, { value: list, expiresAt: existing?.expiresAt ?? null });
 
+    for (let i = 2; i < commandArray.length; i += 1) {
+      list.push(String(commandArray[i]));
+    }
+
+    store.set(listKey, { value: list, expiresAt: existing?.expiresAt ?? null });
     return serializeInteger(list.length);
   }
 
