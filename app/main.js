@@ -409,18 +409,25 @@ function handleCommand(commandArray, transactionState) {
 
   const commandName = String(commandArray[0]).toUpperCase();
 
+  if (transactionState.active && commandName !== "MULTI" && commandName !== "EXEC") {
+    transactionState.commands.push(commandArray);
+    return "+QUEUED\r\n";
+  }
+
   if (commandName === "PING") {
     return "+PONG\r\n";
   }
 
   if (commandName === "MULTI") {
     transactionState.active = true;
+    transactionState.commands = [];
     return "+OK\r\n";
   }
 
   if (commandName === "EXEC") {
     if (transactionState.active) {
       transactionState.active = false;
+      transactionState.commands = [];
       return serializeRESPValue([]);
     }
 
@@ -871,7 +878,7 @@ function handleCommand(commandArray, transactionState) {
 
 const server = net.createServer((connection) => {
   let buffer = Buffer.alloc(0);
-  const transactionState = { active: false };
+  const transactionState = { active: false, commands: [] };
 
   connection.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
