@@ -259,6 +259,24 @@ function handleCommand(commandArray) {
     return serializeBulkString(value);
   }
 
+  if (commandName === "TYPE") {
+    const key = commandArray[1];
+    if (key === undefined) {
+      return "+none\r\n";
+    }
+
+    const value = getStoredValue(String(key));
+    if (value === undefined) {
+      return "+none\r\n";
+    }
+
+    if (Array.isArray(value)) {
+      return "+list\r\n";
+    }
+
+    return "+string\r\n";
+  }
+
   if (commandName === "RPUSH") {
     const key = commandArray[1];
 
