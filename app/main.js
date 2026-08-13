@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const net = require("net");
 
 const store = new Map();
@@ -24,6 +26,108 @@ const rdbFilename = dbFilenameIndex === -1 ? "" : String(process.argv[dbFilename
 function markKeyModified(key) {
   const version = keyVersions.get(key) ?? 0;
   keyVersions.set(key, version + 1);
+}
+
+function readRdbLength(buffer, offset) {
+  const firstByte = buffer[offset];
+  const encoding = firstByte >> 6;
+
+  if (encoding === 0) {
+    return { value: firstByte & 0x3f, nextOffset: offset + 1 };
+  }
+
+  if (encoding === 1) {
+    return { value: ((firstByte & 0x3f) << 8) | buffer[offset + 1], nextOffset: offset + 2 };
+  }
+
+  if (encoding === 2) {
+    return { value: buffer.readUInt32BE(offset + 1), nextOffset: offset + 5 };
+  }
+
+  return { encoding: firstByte & 0x3f, nextOffset: offset + 1 };
+}
+
+function readRdbString(buffer, offset) {
+  const length = readRdbLength(buffer, offset);
+  if (length.encoding === 0) {
+    return { value: String(buffer.readInt8(length.nextOffset)), nextOffset: length.nextOffset + 1 };
+  }
+
+  if (length.encoding === 1) {
+    return { value: String(buffer.readInt16LE(length.nextOffset)), nextOffset: length.nextOffset + 2 };
+  }
+
+  if (length.encoding === 2) {
+    return { value: String(buffer.readInt32LE(length.nextOffset)), nextOffset: length.nextOffset + 4 };
+  }
+
+  return {
+    value: buffer.toString("utf8", length.nextOffset, length.nextOffset + length.value),
+    nextOffset: length.nextOffset + length.value,
+  };
+}
+
+function loadRdbFile() {
+  if (!rdbDirectory || !rdbFilename) {
+    return;
+  }
+
+  const rdbPath = path.join(rdbDirectory, rdbFilename);
+  if (!fs.existsSync(rdbPath)) {
+    return;
+  }
+
+  const buffer = fs.readFileSync(rdbPath);
+  let offset = 9;
+  let expiresAt = null;
+
+  while (offset < buffer.length) {
+    const opcode = buffer[offset];
+    offset += 1;
+
+    if (opcode === 0xff) {
+      return;
+    }
+
+    if (opcode === 0xfa) {
+      offset = readRdbString(buffer, offset).nextOffset;
+      offset = readRdbString(buffer, offset).nextOffset;
+      continue;
+    }
+
+    if (opcode === 0xfe) {
+      offset = readRdbLength(buffer, offset).nextOffset;
+      continue;
+    }
+
+    if (opcode === 0xfb) {
+      offset = readRdbLength(buffer, offset).nextOffset;
+      offset = readRdbLength(buffer, offset).nextOffset;
+      continue;
+    }
+
+    if (opcode === 0xfc) {
+      expiresAt = Number(buffer.readBigUInt64LE(offset));
+      offset += 8;
+      continue;
+    }
+
+    if (opcode === 0xfd) {
+      expiresAt = buffer.readUInt32LE(offset) * 1000;
+      offset += 4;
+      continue;
+    }
+
+    if (opcode !== 0) {
+      return;
+    }
+
+    const key = readRdbString(buffer, offset);
+    const value = readRdbString(buffer, key.nextOffset);
+    store.set(key.value, { value: value.value, expiresAt });
+    expiresAt = null;
+    offset = value.nextOffset;
+  }
 }
 
 function countAcknowledgedReplicas(offset) {
@@ -651,6 +755,15 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeBulkString(value);
   }
 
+  if (commandName === "KEYS") {
+    if (String(commandArray[1] ?? "") !== "*") {
+      return serializeRESPValue([]);
+    }
+
+    pruneExpiredKeys();
+    return serializeRESPValue([...store.keys()]);
+  }
+
   if (commandName === "INCR") {
     const key = commandArray[1];
     if (key === undefined) {
@@ -1110,6 +1223,8 @@ function maybeWakeBlockedClient(listKey) {
 const portIndex = process.argv.indexOf("--port");
 const configuredPort = portIndex === -1 ? NaN : Number(process.argv[portIndex + 1]);
 const port = Number.isInteger(configuredPort) ? configuredPort : 6379;
+
+loadRdbFile();
 
 server.listen(port, "127.0.0.1", () => {
   const masterPortNumber = Number(masterPort);
