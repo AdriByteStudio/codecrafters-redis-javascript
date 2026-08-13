@@ -2,6 +2,7 @@ const net = require("net");
 
 const store = new Map();
 const blockedClients = new Map();
+const blockedXReaders = [];
 
 function scheduleBLPOPTimeout(connection, listKey, timeoutSeconds) {
   if (timeoutSeconds <= 0) {
@@ -321,6 +322,73 @@ function getStoredValue(key) {
   return item.value;
 }
 
+function getEntriesAfterStreamId(streamKey, startId) {
+  const streamEntry = store.get(streamKey);
+  if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
+    return [];
+  }
+
+  return streamEntry.entries.filter((entry) => compareStreamEntryIds(entry.id, startId) > 0);
+}
+
+function maybeWakeBlockedXReaders(streamKey) {
+  if (blockedXReaders.length === 0) {
+    return;
+  }
+
+  const validReaders = [];
+  for (const waiting of blockedXReaders) {
+    if (waiting.timeoutId) {
+      clearTimeout(waiting.timeoutId);
+    }
+
+    const matches = [];
+    for (let i = 0; i < waiting.streamKeys.length; i += 1) {
+      const key = waiting.streamKeys[i];
+      if (key !== streamKey) {
+        continue;
+      }
+
+      const streamEntries = getEntriesAfterStreamId(key, waiting.ids[i]);
+      if (streamEntries.length === 0) {
+        continue;
+      }
+
+      const entryPayload = streamEntries.map((entry) => {
+        const pairValues = [];
+        for (const [field, value] of Object.entries(entry.fields)) {
+          pairValues.push(field, value);
+        }
+        return [entry.id, pairValues];
+      });
+
+      matches.push([key, entryPayload]);
+    }
+
+    if (matches.length > 0) {
+      waiting.connection.write(serializeRESPValue(matches));
+      continue;
+    }
+
+    if (waiting.timeoutMs > 0) {
+      waiting.timeoutId = setTimeout(() => {
+        const index = blockedXReaders.indexOf(waiting);
+        if (index !== -1) {
+          blockedXReaders.splice(index, 1);
+        }
+        waiting.connection.write(serializeNullArray());
+      }, waiting.timeoutMs);
+    }
+
+    validReaders.push(waiting);
+  }
+
+  blockedXReaders.length = 0;
+  for (const waiting of validReaders) {
+    blockedXReaders.push(waiting);
+  }
+}
+
 function handleCommand(commandArray) {
   if (!Array.isArray(commandArray) || commandArray.length === 0) {
     return null;
@@ -473,11 +541,24 @@ function handleCommand(commandArray) {
 
     stream.entries.push({ id: resolvedEntryId, fields });
     store.set(streamKey, { type: "stream", entries: stream.entries, expiresAt: null });
+    maybeWakeBlockedXReaders(streamKey);
     return serializeBulkString(resolvedEntryId);
   }
 
   if (commandName === "XREAD") {
-    const streamsIndex = commandArray.findIndex((arg) => String(arg).toUpperCase() === "STREAMS");
+    let cursor = 1;
+    let timeoutMs = 0;
+
+    if (String(commandArray[cursor] ?? "").toUpperCase() === "BLOCK") {
+      cursor += 1;
+      const timeoutValue = Number(commandArray[cursor]);
+      if (!Number.isNaN(timeoutValue)) {
+        timeoutMs = timeoutValue;
+      }
+      cursor += 1;
+    }
+
+    const streamsIndex = commandArray.findIndex((arg, index) => index >= cursor && String(arg).toUpperCase() === "STREAMS");
     if (streamsIndex === -1) {
       return serializeNullArray();
     }
@@ -493,13 +574,7 @@ function handleCommand(commandArray) {
     for (let i = 0; i < streamCount; i += 1) {
       const streamKey = String(streamArgs[i]);
       const startId = String(streamArgs[streamCount + i]);
-      const streamEntry = store.get(streamKey);
-
-      if (!streamEntry || streamEntry.type !== "stream" || !Array.isArray(streamEntry.entries) || streamEntry.entries.length === 0) {
-        continue;
-      }
-
-      const matches = streamEntry.entries.filter((entry) => compareStreamEntryIds(entry.id, startId) > 0);
+      const matches = getEntriesAfterStreamId(streamKey, startId);
       if (matches.length === 0) {
         continue;
       }
@@ -515,11 +590,37 @@ function handleCommand(commandArray) {
       result.push([streamKey, entryPayload]);
     }
 
-    if (result.length === 0) {
+    if (result.length > 0) {
+      return serializeRESPValue(result);
+    }
+
+    if (timeoutMs <= 0) {
       return serializeNullArray();
     }
 
-    return serializeRESPValue(result);
+    const waiting = {
+      connection: this,
+      streamKeys: [],
+      ids: [],
+      timeoutMs,
+      timeoutId: null,
+    };
+
+    for (let i = 0; i < streamCount; i += 1) {
+      waiting.streamKeys.push(String(streamArgs[i]));
+      waiting.ids.push(String(streamArgs[streamCount + i]));
+    }
+
+    const timeoutHandle = setTimeout(() => {
+      const index = blockedXReaders.indexOf(waiting);
+      if (index !== -1) {
+        blockedXReaders.splice(index, 1);
+      }
+      waiting.connection.write(serializeNullArray());
+    }, timeoutMs);
+    waiting.timeoutId = timeoutHandle;
+    blockedXReaders.push(waiting);
+    return null;
   }
 
   if (commandName === "XRANGE") {
