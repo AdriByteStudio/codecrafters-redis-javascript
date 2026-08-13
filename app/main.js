@@ -3,6 +3,12 @@ const net = require("net");
 const store = new Map();
 const blockedClients = new Map();
 const blockedXReaders = [];
+const keyVersions = new Map();
+
+function markKeyModified(key) {
+  const version = keyVersions.get(key) ?? 0;
+  keyVersions.set(key, version + 1);
+}
 
 function scheduleBLPOPTimeout(connection, listKey, timeoutSeconds) {
   if (timeoutSeconds <= 0) {
@@ -495,7 +501,9 @@ function handleCommand(commandArray, transactionState) {
       }
     }
 
-    store.set(String(key), { value, expiresAt });
+    const storeKey = String(key);
+    store.set(storeKey, { value, expiresAt });
+    markKeyModified(storeKey);
     return "+OK\r\n";
   }
 
@@ -521,7 +529,9 @@ function handleCommand(commandArray, transactionState) {
 
     const entry = store.get(String(key));
     if (!entry) {
-      store.set(String(key), { value: "1", expiresAt: null });
+      const storeKey = String(key);
+      store.set(storeKey, { value: "1", expiresAt: null });
+      markKeyModified(storeKey);
       return serializeInteger(1);
     }
 
@@ -531,7 +541,9 @@ function handleCommand(commandArray, transactionState) {
     }
 
     const incrementedValue = value + 1;
-    store.set(String(key), { value: String(incrementedValue), expiresAt: entry.expiresAt });
+  const storeKey = String(key);
+  store.set(storeKey, { value: String(incrementedValue), expiresAt: entry.expiresAt });
+  markKeyModified(storeKey);
     return serializeInteger(incrementedValue);
   }
 
