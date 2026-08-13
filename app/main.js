@@ -244,6 +244,26 @@ function handleCommand(commandArray) {
     return serializeInteger(list.length);
   }
 
+  if (commandName === "LPUSH") {
+    const key = commandArray[1];
+
+    if (key === undefined || commandArray.length < 3) {
+      return null;
+    }
+
+    const listKey = String(key);
+    const existing = store.get(listKey);
+    const list = existing && Array.isArray(existing.value) ? existing.value.slice() : [];
+
+    const newItems = [];
+    for (let i = commandArray.length - 1; i >= 2; i -= 1) {
+      newItems.push(String(commandArray[i]));
+    }
+
+    store.set(listKey, { value: [...newItems, ...list], expiresAt: existing?.expiresAt ?? null });
+    return serializeInteger([...newItems, ...list].length);
+  }
+
   if (commandName === "LRANGE") {
     const key = commandArray[1];
     const startRaw = Number(commandArray[2]);
