@@ -128,6 +128,10 @@ function serializeNullBulkString() {
   return "$-1\r\n";
 }
 
+function serializeInteger(value) {
+  return `:${Number(value)}\r\n`;
+}
+
 function pruneExpiredKeys() {
   const now = Date.now();
   for (const [key, entry] of store.entries()) {
@@ -213,6 +217,23 @@ function handleCommand(commandArray) {
     }
 
     return serializeBulkString(value);
+  }
+
+  if (commandName === "RPUSH") {
+    const key = commandArray[1];
+    const element = commandArray[2];
+
+    if (key === undefined || element === undefined) {
+      return null;
+    }
+
+    const listKey = String(key);
+    const existing = store.get(listKey);
+    const list = existing && Array.isArray(existing.value) ? existing.value.slice() : [];
+    list.push(String(element));
+    store.set(listKey, { value: list, expiresAt: existing?.expiresAt ?? null });
+
+    return serializeInteger(list.length);
   }
 
   return null;
