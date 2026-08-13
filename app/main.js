@@ -1281,12 +1281,12 @@ const port = Number.isInteger(configuredPort) ? configuredPort : 6379;
 if (configuration.appendonly === "yes") {
   const appendOnlyDirectory = path.join(configuration.dir, configuration.appenddirname);
   const incrementalFilename = `${configuration.appendfilename}.1.incr.aof`;
+  const manifestPath = path.join(appendOnlyDirectory, `${configuration.appendfilename}.manifest`);
   fs.mkdirSync(appendOnlyDirectory, { recursive: true });
   fs.closeSync(fs.openSync(path.join(appendOnlyDirectory, incrementalFilename), "a"));
-  fs.writeFileSync(
-    path.join(appendOnlyDirectory, `${configuration.appendfilename}.manifest`),
-    `file ${incrementalFilename} seq 1 type i\n`,
-  );
+  if (!fs.existsSync(manifestPath)) {
+    fs.writeFileSync(manifestPath, `file ${incrementalFilename} seq 1 type i\n`);
+  }
 }
 
 loadRdbFile();
