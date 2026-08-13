@@ -1020,5 +1020,28 @@ server.listen(port, "127.0.0.1", () => {
   masterConnection.on("connect", () => {
     masterConnection.write("*1\r\n$4\r\nPING\r\n");
   });
+  let handshakeStep = 0;
+  let masterResponse = Buffer.alloc(0);
+  masterConnection.on("data", (chunk) => {
+    masterResponse = Buffer.concat([masterResponse, chunk]);
+
+    while (true) {
+      const parsed = parseRESP(masterResponse, 0);
+      if (!parsed.complete) {
+        break;
+      }
+
+      masterResponse = masterResponse.slice(parsed.nextOffset);
+      if (handshakeStep === 0 && parsed.value === "PONG") {
+        masterConnection.write(serializeRESPValue(["REPLCONF", "listening-port", String(port)]));
+        handshakeStep = 1;
+      } else if (handshakeStep === 1 && parsed.value === "OK") {
+        masterConnection.write(serializeRESPValue(["REPLCONF", "capa", "psync2"]));
+        handshakeStep = 2;
+      } else if (handshakeStep === 2 && parsed.value === "OK") {
+        handshakeStep = 3;
+      }
+    }
+  });
   masterConnection.on("error", () => {});
 });
