@@ -687,7 +687,16 @@ function handleCommand(commandArray, transactionState, connection) {
 
   if (commandName === "PUBLISH") {
     const channel = String(commandArray[1] ?? "");
+    const message = String(commandArray[2] ?? "");
     const subscribers = channelSubscribers.get(channel);
+    
+    if (subscribers) {
+      const payload = serializeArray(["message", channel, message]);
+      for (const conn of subscribers) {
+        conn.write(payload);
+      }
+    }
+    
     return serializeInteger(subscribers ? subscribers.size : 0);
   }
 
