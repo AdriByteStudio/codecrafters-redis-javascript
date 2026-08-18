@@ -616,7 +616,7 @@ function handleCommand(commandArray, transactionState, connection) {
 
   const commandName = String(commandArray[0]).toUpperCase();
 
-  const isSubscribed = transactionState.subscriptions.size > 0;
+  const isSubscribed = transactionState?.subscriptions?.size > 0;
   const allowedInSubscribedMode = ["SUBSCRIBE", "UNSUBSCRIBE", "PSUBSCRIBE", "PUNSUBSCRIBE", "PING", "QUIT"];
 
   if (isSubscribed && !allowedInSubscribedMode.includes(commandName)) {
