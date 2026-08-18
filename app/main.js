@@ -784,6 +784,18 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeInteger(zset.entries.length);
   }
 
+  if (commandName === "ZSCORE") {
+    const key = String(commandArray[1] ?? "");
+    const member = String(commandArray[2] ?? "");
+
+    const zset = store.get(key);
+    if (!zset || zset.type !== "zset" || !zset.members.has(member)) {
+      return serializeNullBulkString();
+    }
+
+    return serializeBulkString(zset.members.get(member));
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
