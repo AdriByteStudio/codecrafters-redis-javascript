@@ -616,6 +616,13 @@ function handleCommand(commandArray, transactionState, connection) {
 
   const commandName = String(commandArray[0]).toUpperCase();
 
+  const isSubscribed = transactionState.subscriptions.size > 0;
+  const allowedInSubscribedMode = ["SUBSCRIBE", "UNSUBSCRIBE", "PSUBSCRIBE", "PUNSUBSCRIBE", "PING", "QUIT"];
+
+  if (isSubscribed && !allowedInSubscribedMode.includes(commandName)) {
+    return serializeError(`Can't execute '${String(commandArray[0]).toLowerCase()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context`);
+  }
+
   if (commandName === "WATCH") {
     if (transactionState.active) {
       return serializeError("WATCH inside MULTI is not allowed");
@@ -646,6 +653,14 @@ function handleCommand(commandArray, transactionState, connection) {
     const channel = String(commandArray[1] ?? "");
     transactionState.subscriptions.add(channel);
     return `*3\r\n${serializeBulkString("subscribe")}${serializeBulkString(channel)}${serializeInteger(transactionState.subscriptions.size)}`;
+  }
+
+  if (commandName === "UNSUBSCRIBE") {
+    const channel = String(commandArray[1] ?? "");
+    if (transactionState.subscriptions.has(channel)) {
+      transactionState.subscriptions.delete(channel);
+    }
+    return `*3\r\n${serializeBulkString("unsubscribe")}${serializeBulkString(channel)}${serializeInteger(transactionState.subscriptions.size)}`;
   }
 
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
