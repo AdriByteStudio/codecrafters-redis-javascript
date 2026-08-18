@@ -748,8 +748,8 @@ function handleCommand(commandArray, transactionState, connection) {
 
   if (commandName === "ZRANGE") {
     const key = String(commandArray[1] ?? "");
-    const start = parseInt(String(commandArray[2] ?? ""), 10);
-    const end = parseInt(String(commandArray[3] ?? ""), 10);
+    let start = parseInt(String(commandArray[2] ?? ""), 10);
+    let end = parseInt(String(commandArray[3] ?? ""), 10);
 
     const zset = store.get(key);
     if (!zset || zset.type !== "zset") {
@@ -757,6 +757,15 @@ function handleCommand(commandArray, transactionState, connection) {
     }
 
     const cardinality = zset.entries.length;
+
+    // Normalize negative indexes according to the prompt's rules
+    if (start < 0) {
+      start = Math.max(0, cardinality + start);
+    }
+    if (end < 0) {
+      end = Math.max(0, cardinality + end);
+    }
+
     if (start >= cardinality || start > end) {
       return serializeArray([]);
     }
