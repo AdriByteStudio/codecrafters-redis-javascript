@@ -8,6 +8,7 @@ const blockedXReaders = [];
 const keyVersions = new Map();
 const replicaConnections = new Set();
 const pendingWaits = new Set();
+const channelSubscribers = new Map();
 let isReplayingAof = false;
 const serverRole = process.argv.includes("--replicaof") ? "slave" : "master";
 const masterReplicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
@@ -654,16 +655,40 @@ function handleCommand(commandArray, transactionState, connection) {
 
   if (commandName === "SUBSCRIBE") {
     const channel = String(commandArray[1] ?? "");
-    transactionState.subscriptions.add(channel);
-    return `*3\r\n${serializeBulkString("subscribe")}${serializeBulkString(channel)}${serializeInteger(transactionState.subscriptions.size)}`;
+    if (transactionState.subscriptions) {
+      transactionState.subscriptions.add(channel);
+    }
+    
+    if (connection) {
+      if (!channelSubscribers.has(channel)) {
+        channelSubscribers.set(channel, new Set());
+      }
+      channelSubscribers.get(channel).add(connection);
+    }
+
+    const subCount = transactionState.subscriptions ? transactionState.subscriptions.size : 0;
+    return `*3\r\n${serializeBulkString("subscribe")}${serializeBulkString(channel)}${serializeInteger(subCount)}`;
   }
 
   if (commandName === "UNSUBSCRIBE") {
     const channel = String(commandArray[1] ?? "");
-    if (transactionState.subscriptions.has(channel)) {
+    if (transactionState.subscriptions && transactionState.subscriptions.has(channel)) {
       transactionState.subscriptions.delete(channel);
+      if (channelSubscribers.has(channel)) {
+        channelSubscribers.get(channel).delete(connection);
+        if (channelSubscribers.get(channel).size === 0) {
+          channelSubscribers.delete(channel);
+        }
+      }
     }
-    return `*3\r\n${serializeBulkString("unsubscribe")}${serializeBulkString(channel)}${serializeInteger(transactionState.subscriptions.size)}`;
+    const subCount = transactionState.subscriptions ? transactionState.subscriptions.size : 0;
+    return `*3\r\n${serializeBulkString("unsubscribe")}${serializeBulkString(channel)}${serializeInteger(subCount)}`;
+  }
+
+  if (commandName === "PUBLISH") {
+    const channel = String(commandArray[1] ?? "");
+    const subscribers = channelSubscribers.get(channel);
+    return serializeInteger(subscribers ? subscribers.size : 0);
   }
 
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
@@ -1248,6 +1273,14 @@ const server = net.createServer((connection) => {
 
   connection.on("close", () => {
     replicaConnections.delete(connection);
+    for (const [channel, subscribers] of channelSubscribers) {
+      if (subscribers.has(connection)) {
+        subscribers.delete(connection);
+        if (subscribers.size === 0) {
+          channelSubscribers.delete(channel);
+        }
+      }
+    }
   });
 
   connection.on("data", (chunk) => {
