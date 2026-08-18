@@ -646,6 +646,9 @@ function handleCommand(commandArray, transactionState, connection) {
   }
 
   if (commandName === "PING") {
+    if (transactionState?.subscriptions?.size > 0) {
+      return serializeArray(["pong", ""]);
+    }
     return "+PONG\r\n";
   }
 
