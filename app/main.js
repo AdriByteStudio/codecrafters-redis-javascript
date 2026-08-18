@@ -775,6 +775,15 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeArray(members);
   }
 
+  if (commandName === "ZCARD") {
+    const key = String(commandArray[1] ?? "");
+    const zset = store.get(key);
+    if (!zset || zset.type !== "zset") {
+      return serializeInteger(0);
+    }
+    return serializeInteger(zset.entries.length);
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
