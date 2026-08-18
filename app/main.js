@@ -746,6 +746,26 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeInteger(index);
   }
 
+  if (commandName === "ZRANGE") {
+    const key = String(commandArray[1] ?? "");
+    const start = parseInt(String(commandArray[2] ?? ""), 10);
+    const end = parseInt(String(commandArray[3] ?? ""), 10);
+
+    const zset = store.get(key);
+    if (!zset || zset.type !== "zset") {
+      return serializeArray([]);
+    }
+
+    const cardinality = zset.entries.length;
+    if (start >= cardinality || start > end) {
+      return serializeArray([]);
+    }
+
+    const actualEnd = Math.min(end, cardinality - 1);
+    const members = zset.entries.slice(start, actualEnd + 1).map((entry) => entry.member);
+    return serializeArray(members);
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
