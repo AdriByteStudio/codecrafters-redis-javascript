@@ -733,6 +733,19 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeInteger(1);
   }
 
+  if (commandName === "ZRANK") {
+    const key = String(commandArray[1] ?? "");
+    const member = String(commandArray[2] ?? "");
+
+    const zset = store.get(key);
+    if (!zset || zset.type !== "zset" || !zset.members.has(member)) {
+      return serializeNullBulkString();
+    }
+
+    const index = zset.entries.findIndex((entry) => entry.member === member);
+    return serializeInteger(index);
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
