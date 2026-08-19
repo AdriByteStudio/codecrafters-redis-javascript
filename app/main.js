@@ -835,6 +835,13 @@ function handleCommand(commandArray, transactionState, connection) {
   }
 
   if (commandName === "GEOADD") {
+    const longitude = parseFloat(String(commandArray[1] ?? ""));
+    const latitude = parseFloat(String(commandArray[2] ?? ""));
+
+    if (longitude < -180 || longitude > 180 || latitude < -85.05112878 || latitude > 85.05112878) {
+      return serializeError(`invalid longitude,latitude pair ${longitude},${latitude}`);
+    }
+
     return serializeInteger(1);
   }
 
