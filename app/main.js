@@ -72,6 +72,32 @@ function encodeGeoCoordinate(longitude, latitude) {
   return interleave(normalizedLatitude, normalizedLongitude);
 }
 
+function compactInt64ToInt32(v) {
+  let b = BigInt(v) & 0x5555555555555555n;
+  b = (b | (b >> 1n)) & 0x3333333333333333n;
+  b = (b | (b >> 2n)) & 0x0F0F0F0F0F0F0F0Fn;
+  b = (b | (b >> 4n)) & 0x00FF00FF00FF00FFn;
+  b = (b | (b >> 8n)) & 0x0000FFFF0000FFFFn;
+  b = (b | (b >> 16n)) & 0x00000000FFFFFFFFn;
+  return Number(b);
+}
+
+function decodeGeoCoordinate(score) {
+  const bScore = BigInt(score);
+  const x = compactInt64ToInt32(bScore);
+  const y = compactInt64ToInt32(bScore >> 1n);
+
+  const latMin = MIN_LATITUDE + LATITUDE_RANGE * (x / (2 ** 26));
+  const latMax = MIN_LATITUDE + LATITUDE_RANGE * ((x + 1) / (2 ** 26));
+  const lonMin = MIN_LONGITUDE + LONGITUDE_RANGE * (y / (2 ** 26));
+  const lonMax = MIN_LONGITUDE + LONGITUDE_RANGE * ((y + 1) / (2 ** 26));
+
+  return {
+    longitude: (lonMin + lonMax) / 2,
+    latitude: (latMin + latMax) / 2,
+  };
+}
+
 function readRdbLength(buffer, offset) {
   const firstByte = buffer[offset];
   const encoding = firstByte >> 6;
@@ -934,7 +960,13 @@ function handleCommand(commandArray, transactionState, connection) {
       if (!zset || zset.type !== "zset" || !zset.members.has(String(member))) {
         response += "*-1\r\n";
       } else {
-        response += "*2\r\n$1\r\n0\r\n$1\r\n0\r\n";
+        const score = zset.members.get(String(member));
+        const { longitude, latitude } = decodeGeoCoordinate(score);
+        const lonStr = longitude.toFixed(17);
+        const latStr = latitude.toFixed(17);
+        const lonLen = lonStr.length;
+        const latLen = latStr.length;
+        response += `*2\r\n$${lonLen}\r\n${lonStr}\r\n$${latLen}\r\n${latStr}\r\n`;
       }
     }
 
