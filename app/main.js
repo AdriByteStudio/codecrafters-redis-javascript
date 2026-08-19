@@ -694,7 +694,7 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeError(`Can't execute '${String(commandArray[0]).toLowerCase()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context`);
   }
 
-  if (!connection.authenticated && commandName !== "AUTH" && commandName !== "QUIT") {
+  if (connection && !connection.authenticated && commandName !== "AUTH" && commandName !== "QUIT") {
     return "-NOAUTH Authentication required.\r\n";
   }
 
