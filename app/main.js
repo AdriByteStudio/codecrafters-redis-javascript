@@ -815,6 +815,25 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeBulkString(zset.members.get(member));
   }
 
+  if (commandName === "ZREM") {
+    const key = String(commandArray[1] ?? "");
+    const member = String(commandArray[2] ?? "");
+
+    const zset = store.get(key);
+    if (!zset || zset.type !== "zset" || !zset.members.has(member)) {
+      return serializeInteger(0);
+    }
+
+    zset.members.delete(member);
+    const index = zset.entries.findIndex((e) => e.member === member);
+    if (index !== -1) {
+      zset.entries.splice(index, 1);
+    }
+
+    markKeyModified(key);
+    return serializeInteger(1);
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
