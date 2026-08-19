@@ -1783,6 +1783,7 @@ server.listen(port, "127.0.0.1", () => {
         masterResponse = masterResponse.slice(rdbLength);
         rdbLength = null;
         handshakeStep = 5;
+        masterConnection.authenticated = true;
         continue;
       }
 
