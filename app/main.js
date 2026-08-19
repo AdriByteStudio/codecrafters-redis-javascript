@@ -51,19 +51,19 @@ const LATITUDE_RANGE = MAX_LATITUDE - MIN_LATITUDE;
 const LONGITUDE_RANGE = MAX_LONGITUDE - MIN_LONGITUDE;
 
 function spreadInt32ToInt64(v) {
-  v = v & 0xFFFFFFFF;
-  v = (v | (v << 16)) & 0x0000FFFF0000FFFF;
-  v = (v | (v << 8)) & 0x00FF00FF00FF00FF;
-  v = (v | (v << 4)) & 0x0F0F0F0F0F0F0F0F;
-  v = (v | (v << 2)) & 0x3333333333333333;
-  v = (v | (v << 1)) & 0x5555555555555555;
-  return v;
+  let b = BigInt(v) & 0xFFFFFFFFn;
+  b = (b | (b << 16n)) & 0x0000FFFF0000FFFFn;
+  b = (b | (b << 8n)) & 0x00FF00FF00FF00FFn;
+  b = (b | (b << 4n)) & 0x0F0F0F0F0F0F0F0Fn;
+  b = (b | (b << 2n)) & 0x3333333333333333n;
+  b = (b | (b << 1n)) & 0x5555555555555555n;
+  return b;
 }
 
 function interleave(x, y) {
-  x = spreadInt32ToInt64(x);
-  y = spreadInt32ToInt64(y);
-  return x | (y << 1);
+  const bx = spreadInt32ToInt64(x);
+  const by = spreadInt32ToInt64(y);
+  return Number(bx | (by << 1n));
 }
 
 function encodeGeoCoordinate(longitude, latitude) {
