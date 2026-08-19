@@ -1028,6 +1028,10 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeRESPValue(results);
   }
 
+  if (commandName === "ACL" && String(commandArray[1] ?? "").toUpperCase() === "WHOAMI") {
+    return "$7\r\ndefault\r\n";
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
