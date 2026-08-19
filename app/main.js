@@ -43,6 +43,35 @@ function markKeyModified(key) {
   keyVersions.set(key, version + 1);
 }
 
+const MIN_LATITUDE = -85.05112878;
+const MAX_LATITUDE = 85.05112878;
+const MIN_LONGITUDE = -180;
+const MAX_LONGITUDE = 180;
+const LATITUDE_RANGE = MAX_LATITUDE - MIN_LATITUDE;
+const LONGITUDE_RANGE = MAX_LONGITUDE - MIN_LONGITUDE;
+
+function spreadInt32ToInt64(v) {
+  v = v & 0xFFFFFFFF;
+  v = (v | (v << 16)) & 0x0000FFFF0000FFFF;
+  v = (v | (v << 8)) & 0x00FF00FF00FF00FF;
+  v = (v | (v << 4)) & 0x0F0F0F0F0F0F0F0F;
+  v = (v | (v << 2)) & 0x3333333333333333;
+  v = (v | (v << 1)) & 0x5555555555555555;
+  return v;
+}
+
+function interleave(x, y) {
+  x = spreadInt32ToInt64(x);
+  y = spreadInt32ToInt64(y);
+  return x | (y << 1);
+}
+
+function encodeGeoCoordinate(longitude, latitude) {
+  const normalizedLatitude = Math.trunc((2 ** 26) * (latitude - MIN_LATITUDE) / LATITUDE_RANGE);
+  const normalizedLongitude = Math.trunc((2 ** 26) * (longitude - MIN_LONGITUDE) / LONGITUDE_RANGE);
+  return interleave(normalizedLatitude, normalizedLongitude);
+}
+
 function readRdbLength(buffer, offset) {
   const firstByte = buffer[offset];
   const encoding = firstByte >> 6;
@@ -850,7 +879,7 @@ function handleCommand(commandArray, transactionState, connection) {
       store.set(key, zset);
     }
 
-    const score = 0;
+    const score = encodeGeoCoordinate(longitude, latitude);
     if (zset.members.has(member)) {
       const oldScore = zset.members.get(member);
       if (oldScore !== score) {
