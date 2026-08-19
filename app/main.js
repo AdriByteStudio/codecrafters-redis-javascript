@@ -694,6 +694,10 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeError(`Can't execute '${String(commandArray[0]).toLowerCase()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context`);
   }
 
+  if (!connection.authenticated && commandName !== "AUTH" && commandName !== "QUIT") {
+    return "-NOAUTH Authentication required.\r\n";
+  }
+
   if (commandName === "WATCH") {
     if (transactionState.active) {
       return serializeError("WATCH inside MULTI is not allowed");
@@ -1077,6 +1081,7 @@ function handleCommand(commandArray, transactionState, connection) {
     if (!user.passwords.includes(hash)) {
       return "-WRONGPASS invalid username-password pair or user is disabled.\r\n";
     }
+    connection.authenticated = true;
     return "+OK\r\n";
   }
 
@@ -1659,6 +1664,9 @@ function handleCommand(commandArray, transactionState, connection) {
 const server = net.createServer((connection) => {
   let buffer = Buffer.alloc(0);
   const transactionState = { active: false, commands: [], watchedKeys: new Map(), subscriptions: new Set() };
+
+  const defaultUser = users.get("default");
+  connection.authenticated = defaultUser && defaultUser.flags.includes("nopass");
 
   connection.on("close", () => {
     replicaConnections.delete(connection);
