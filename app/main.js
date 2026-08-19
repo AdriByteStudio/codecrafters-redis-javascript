@@ -834,6 +834,10 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeInteger(1);
   }
 
+  if (commandName === "GEOADD") {
+    return serializeInteger(1);
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
