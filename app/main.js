@@ -1033,7 +1033,7 @@ function handleCommand(commandArray, transactionState, connection) {
   }
 
   if (commandName === "ACL" && String(commandArray[1] ?? "").toUpperCase() === "GETUSER") {
-    return serializeRESPValue(["flags", []]);
+    return serializeRESPValue(["flags", ["nopass"]]);
   }
 
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
