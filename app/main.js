@@ -1001,6 +1001,33 @@ function handleCommand(commandArray, transactionState, connection) {
     return `$${distStr.length}\r\n${distStr}\r\n`;
   }
 
+  if (commandName === "GEOSEARCH") {
+    const key = String(commandArray[1] ?? "");
+    const lon = parseFloat(String(commandArray[3] ?? ""));
+    const lat = parseFloat(String(commandArray[4] ?? ""));
+    const radius = parseFloat(String(commandArray[6] ?? ""));
+    const unit = String(commandArray[7] ?? "m");
+
+    const unitToMeters = { m: 1, km: 1000, mi: 1609.344, ft: 0.3048 };
+    const radiusInMeters = radius * (unitToMeters[unit] ?? 1);
+
+    const zset = store.get(key);
+    if (!zset || zset.type !== "zset") {
+      return "*0\r\n";
+    }
+
+    const results = [];
+    for (const [member, score] of zset.members) {
+      const coord = decodeGeoCoordinate(score);
+      const distance = haversine(lat, lon, coord.latitude, coord.longitude);
+      if (distance <= radiusInMeters) {
+        results.push(member);
+      }
+    }
+
+    return serializeRESPValue(results);
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
