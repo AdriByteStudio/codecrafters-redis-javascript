@@ -98,6 +98,17 @@ function decodeGeoCoordinate(score) {
   };
 }
 
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6372797.560856;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function readRdbLength(buffer, offset) {
   const firstByte = buffer[offset];
   const encoding = firstByte >> 6;
@@ -971,6 +982,23 @@ function handleCommand(commandArray, transactionState, connection) {
     }
 
     return response;
+  }
+
+  if (commandName === "GEODIST") {
+    const key = String(commandArray[1] ?? "");
+    const member1 = String(commandArray[2] ?? "");
+    const member2 = String(commandArray[3] ?? "");
+
+    const zset = store.get(key);
+    if (!zset || zset.type !== "zset" || !zset.members.has(member1) || !zset.members.has(member2)) {
+      return "$-1\r\n";
+    }
+
+    const coord1 = decodeGeoCoordinate(zset.members.get(member1));
+    const coord2 = decodeGeoCoordinate(zset.members.get(member2));
+    const distance = haversine(coord1.latitude, coord1.longitude, coord2.latitude, coord2.longitude);
+    const distStr = distance.toFixed(4);
+    return `$${distStr.length}\r\n${distStr}\r\n`;
   }
 
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
