@@ -923,6 +923,24 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeInteger(1);
   }
 
+  if (commandName === "GEOPOS") {
+    const key = String(commandArray[1] ?? "");
+    const members = commandArray.slice(2);
+
+    const zset = store.get(key);
+    let response = `*${members.length}\r\n`;
+
+    for (const member of members) {
+      if (!zset || zset.type !== "zset" || !zset.members.has(String(member))) {
+        response += "*-1\r\n";
+      } else {
+        response += "*2\r\n$1\r\n0\r\n$1\r\n0\r\n";
+      }
+    }
+
+    return response;
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
