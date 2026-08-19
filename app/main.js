@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const net = require("net");
+const crypto = require("crypto");
 
 const store = new Map();
 const blockedClients = new Map();
@@ -8,6 +9,9 @@ const blockedXReaders = [];
 const keyVersions = new Map();
 const replicaConnections = new Set();
 const pendingWaits = new Set();
+
+const users = new Map();
+users.set("default", { flags: ["nopass"], passwords: [] });
 const channelSubscribers = new Map();
 let isReplayingAof = false;
 const serverRole = process.argv.includes("--replicaof") ? "slave" : "master";
@@ -1033,7 +1037,33 @@ function handleCommand(commandArray, transactionState, connection) {
   }
 
   if (commandName === "ACL" && String(commandArray[1] ?? "").toUpperCase() === "GETUSER") {
-    return serializeRESPValue(["flags", ["nopass"], "passwords", []]);
+    const username = String(commandArray[2] ?? "").toLowerCase();
+    const user = users.get(username);
+    if (!user) {
+      return "$-1\r\n";
+    }
+    return serializeRESPValue(["flags", user.flags, "passwords", user.passwords]);
+  }
+
+  if (commandName === "ACL" && String(commandArray[1] ?? "").toUpperCase() === "SETUSER") {
+    const username = String(commandArray[2] ?? "").toLowerCase();
+    let user = users.get(username);
+    if (!user) {
+      user = { flags: [], passwords: [] };
+      users.set(username, user);
+    }
+
+    for (let i = 3; i < commandArray.length; i++) {
+      const rule = String(commandArray[i] ?? "");
+      if (rule.startsWith(">")) {
+        const password = rule.slice(1);
+        const hash = crypto.createHash("sha256").update(password).digest("hex");
+        user.passwords.push(hash);
+        user.flags = user.flags.filter((f) => f !== "nopass");
+      }
+    }
+
+    return "+OK\r\n";
   }
 
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
