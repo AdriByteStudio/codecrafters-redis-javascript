@@ -712,6 +712,25 @@ function handleCommand(commandArray, transactionState, connection) {
     }
 
     if (zset.members.has(member)) {
+      // Always update: remove old entry, update score, re-insert in sorted order
+      const oldIndex = zset.entries.findIndex((e) => e.member === member);
+      if (oldIndex !== -1) {
+        zset.entries.splice(oldIndex, 1);
+      }
+      zset.members.set(member, score);
+      const updatedEntry = { member, score };
+      let inserted = false;
+      for (let i = 0; i < zset.entries.length; i++) {
+        if (score < zset.entries[i].score || (score === zset.entries[i].score && member < zset.entries[i].member)) {
+          zset.entries.splice(i, 0, updatedEntry);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) {
+        zset.entries.push(updatedEntry);
+      }
+      markKeyModified(key);
       return serializeInteger(0);
     }
 
