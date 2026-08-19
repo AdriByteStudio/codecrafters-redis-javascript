@@ -835,13 +835,62 @@ function handleCommand(commandArray, transactionState, connection) {
   }
 
   if (commandName === "GEOADD") {
+    const key = String(commandArray[1] ?? "");
     const longitude = parseFloat(String(commandArray[2] ?? ""));
     const latitude = parseFloat(String(commandArray[3] ?? ""));
+    const member = String(commandArray[4] ?? "");
 
     if (longitude < -180 || longitude > 180 || latitude < -85.05112878 || latitude > 85.05112878) {
       return serializeError(`invalid longitude,latitude pair ${longitude},${latitude}`);
     }
 
+    let zset = store.get(key);
+    if (!zset || zset.type !== "zset") {
+      zset = { type: "zset", members: new Map(), entries: [] };
+      store.set(key, zset);
+    }
+
+    const score = 0;
+    if (zset.members.has(member)) {
+      const oldScore = zset.members.get(member);
+      if (oldScore !== score) {
+        const oldIndex = zset.entries.findIndex((e) => e.member === member);
+        if (oldIndex !== -1) {
+          zset.entries.splice(oldIndex, 1);
+        }
+        zset.members.set(member, score);
+        const newEntry = { member, score };
+        let inserted = false;
+        for (let i = 0; i < zset.entries.length; i++) {
+          if (score < zset.entries[i].score || (score === zset.entries[i].score && member < zset.entries[i].member)) {
+            zset.entries.splice(i, 0, newEntry);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) {
+          zset.entries.push(newEntry);
+        }
+        markKeyModified(key);
+      }
+      return serializeInteger(0);
+    }
+
+    zset.members.set(member, score);
+    const newEntry = { member, score };
+    let inserted = false;
+    for (let i = 0; i < zset.entries.length; i++) {
+      if (score < zset.entries[i].score || (score === zset.entries[i].score && member < zset.entries[i].member)) {
+        zset.entries.splice(i, 0, newEntry);
+        inserted = true;
+        break;
+      }
+    }
+    if (!inserted) {
+      zset.entries.push(newEntry);
+    }
+
+    markKeyModified(key);
     return serializeInteger(1);
   }
 
