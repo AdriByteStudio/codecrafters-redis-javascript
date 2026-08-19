@@ -1066,6 +1066,20 @@ function handleCommand(commandArray, transactionState, connection) {
     return "+OK\r\n";
   }
 
+  if (commandName === "AUTH") {
+    const username = String(commandArray[1] ?? "").toLowerCase();
+    const password = String(commandArray[2] ?? "");
+    const user = users.get(username);
+    if (!user) {
+      return "-WRONGPASS invalid username-password pair or user is disabled.\r\n";
+    }
+    const hash = crypto.createHash("sha256").update(password).digest("hex");
+    if (!user.passwords.includes(hash)) {
+      return "-WRONGPASS invalid username-password pair or user is disabled.\r\n";
+    }
+    return "+OK\r\n";
+  }
+
   if (commandName === "CONFIG" && String(commandArray[1] ?? "").toUpperCase() === "GET") {
     const parameter = String(commandArray[2] ?? "").toLowerCase();
     if (Object.hasOwn(configuration, parameter)) {
