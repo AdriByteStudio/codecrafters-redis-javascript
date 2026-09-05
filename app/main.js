@@ -1309,6 +1309,20 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeInteger((bytes[byteIndex] >> bitIndex) & 1);
   }
 
+  if (commandName === "STRLEN") {
+    const key = commandArray[1];
+    if (key === undefined) {
+      return serializeInteger(0);
+    }
+
+    const value = getStoredValue(String(key));
+    if (value === undefined) {
+      return serializeInteger(0);
+    }
+
+    return serializeInteger(Buffer.byteLength(String(value), "latin1"));
+  }
+
   if (commandName === "KEYS") {
     if (String(commandArray[1] ?? "") !== "*") {
       return serializeRESPValue([]);
