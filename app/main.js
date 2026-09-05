@@ -1323,6 +1323,43 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeInteger(Buffer.byteLength(String(value), "latin1"));
   }
 
+  if (commandName === "BITCOUNT") {
+    const key = commandArray[1];
+    if (key === undefined) {
+      return serializeInteger(0);
+    }
+
+    const value = getStoredValue(String(key));
+    if (value === undefined) {
+      return serializeInteger(0);
+    }
+
+    const bytes = Buffer.from(String(value), "latin1");
+    let start = commandArray[2] === undefined ? 0 : Number(commandArray[2]);
+    let end = commandArray[3] === undefined ? bytes.length - 1 : Number(commandArray[3]);
+
+    if (Number.isNaN(start) || Number.isNaN(end)) {
+      return serializeError("value is not an integer or out of range");
+    }
+
+    end = Math.min(end, bytes.length - 1);
+
+    if (start >= bytes.length || start > end) {
+      return serializeInteger(0);
+    }
+
+    let count = 0;
+    for (let i = start; i <= end; i += 1) {
+      let byte = bytes[i];
+      while (byte > 0) {
+        count += byte & 1;
+        byte >>= 1;
+      }
+    }
+
+    return serializeInteger(count);
+  }
+
   if (commandName === "KEYS") {
     if (String(commandArray[1] ?? "") !== "*") {
       return serializeRESPValue([]);
