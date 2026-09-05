@@ -1252,6 +1252,39 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeBulkString(value);
   }
 
+  if (commandName === "SETBIT") {
+    const key = commandArray[1];
+    const offset = Number(commandArray[2]);
+    const bitValue = Number(commandArray[3]);
+
+    if (key === undefined || !Number.isInteger(offset) || offset < 0 || (bitValue !== 0 && bitValue !== 1)) {
+      return serializeError("bit offset is not an integer or out of range");
+    }
+
+    const storeKey = String(key);
+    const existing = store.get(storeKey);
+    const byteIndex = Math.floor(offset / 8);
+    const bitIndex = 7 - (offset % 8);
+
+    let bytes = existing ? Buffer.from(String(existing.value), "latin1") : Buffer.alloc(0);
+    if (bytes.length <= byteIndex) {
+      const grown = Buffer.alloc(byteIndex + 1);
+      bytes.copy(grown);
+      bytes = grown;
+    }
+
+    const originalBit = (bytes[byteIndex] >> bitIndex) & 1;
+    if (bitValue === 1) {
+      bytes[byteIndex] |= (1 << bitIndex);
+    } else {
+      bytes[byteIndex] &= ~(1 << bitIndex);
+    }
+
+    store.set(storeKey, { value: bytes.toString("latin1"), expiresAt: existing?.expiresAt ?? null });
+    markKeyModified(storeKey);
+    return serializeInteger(originalBit);
+  }
+
   if (commandName === "KEYS") {
     if (String(commandArray[1] ?? "") !== "*") {
       return serializeRESPValue([]);
