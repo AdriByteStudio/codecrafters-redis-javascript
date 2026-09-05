@@ -1360,6 +1360,34 @@ function handleCommand(commandArray, transactionState, connection) {
     return serializeInteger(count);
   }
 
+  if (commandName === "BITOP") {
+    const operation = String(commandArray[1] ?? "").toUpperCase();
+    const destKey = commandArray[2];
+
+    if (operation !== "AND" || destKey === undefined || commandArray.length < 4) {
+      return null;
+    }
+
+    const sourceKeys = commandArray.slice(3).map((sourceKey) => String(sourceKey));
+    const sourceBuffers = sourceKeys.map((sourceKey) => {
+      const value = getStoredValue(sourceKey);
+      return value === undefined ? Buffer.alloc(0) : Buffer.from(String(value), "latin1");
+    });
+
+    const resultLength = Math.max(...sourceBuffers.map((buffer) => buffer.length));
+    const result = Buffer.alloc(resultLength, 0xff);
+    for (const buffer of sourceBuffers) {
+      for (let i = 0; i < resultLength; i += 1) {
+        result[i] &= i < buffer.length ? buffer[i] : 0;
+      }
+    }
+
+    const storeKey = String(destKey);
+    store.set(storeKey, { value: result.toString("latin1"), expiresAt: null });
+    markKeyModified(storeKey);
+    return serializeInteger(result.length);
+  }
+
   if (commandName === "KEYS") {
     if (String(commandArray[1] ?? "") !== "*") {
       return serializeRESPValue([]);
