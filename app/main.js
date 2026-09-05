@@ -1364,7 +1364,7 @@ function handleCommand(commandArray, transactionState, connection) {
     const operation = String(commandArray[1] ?? "").toUpperCase();
     const destKey = commandArray[2];
 
-    if (operation !== "AND" || destKey === undefined || commandArray.length < 4) {
+    if ((operation !== "AND" && operation !== "OR") || destKey === undefined || commandArray.length < 4) {
       return null;
     }
 
@@ -1375,10 +1375,15 @@ function handleCommand(commandArray, transactionState, connection) {
     });
 
     const resultLength = Math.max(...sourceBuffers.map((buffer) => buffer.length));
-    const result = Buffer.alloc(resultLength, 0xff);
+    const result = Buffer.alloc(resultLength, operation === "AND" ? 0xff : 0x00);
     for (const buffer of sourceBuffers) {
       for (let i = 0; i < resultLength; i += 1) {
-        result[i] &= i < buffer.length ? buffer[i] : 0;
+        const sourceByte = i < buffer.length ? buffer[i] : 0;
+        if (operation === "AND") {
+          result[i] &= sourceByte;
+        } else {
+          result[i] |= sourceByte;
+        }
       }
     }
 
